@@ -139,3 +139,45 @@ public struct SnapshotEngine: Sendable {
         return ranked.prefix(limit).map { snapshot(of: $0.id) }
     }
 }
+
+// MARK: - Change coupling
+
+extension SnapshotEngine {
+    /// Files that tend to change in the same commits as `id`, as of the current position.
+    ///
+    /// This needs no extra bookkeeping and no precomputed pair index: the file's own event
+    /// list already names every commit that touched it, and each of those commits already
+    /// names every other file it touched. Walking that is proportional to the file's own
+    /// history rather than the repository's, which is why coupling can be answered on
+    /// demand for whatever the user just clicked instead of maintained for every pair.
+    public func coupling(for id: FileID, options: CouplingOptions = .default) -> [CouplingLink] {
+        guard states.indices.contains(id) else { return [] }
+        let events = history.files[id].events.prefix(states[id].appliedEvents)
+
+        var shared: [FileID: Int] = [:]
+        var ownCommits = 0
+        for event in events {
+            let touched = history.touchedFiles[event.commitIndex]
+            guard touched.count <= options.maximumFilesPerCommit else { continue }
+            ownCommits += 1
+            for other in touched where other != id {
+                shared[other, default: 0] += 1
+            }
+        }
+        guard ownCommits > 0 else { return [] }
+
+        return shared.compactMap { partner, count -> CouplingLink? in
+            guard count >= options.minimumSharedCommits, isAlive(partner) else { return nil }
+            return CouplingLink(
+                id: partner,
+                path: history.files[partner].path(at: commitIndex),
+                sharedCommits: count,
+                partnerCommits: states[partner].appliedEvents,
+                degree: Double(count) / Double(ownCommits)
+            )
+        }
+        .sorted { ($0.degree, $0.sharedCommits) > ($1.degree, $1.sharedCommits) }
+        .prefix(options.limit)
+        .map { $0 }
+    }
+}

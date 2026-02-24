@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "Codewaker",
+    name: "Codewake",
     platforms: [.macOS(.v15)],
     products: [
-        .library(name: "CodewakerKit", targets: ["CodewakerKit"]),
-        .executable(name: "codewaker", targets: ["Codewaker"]),
+        .library(name: "CodewakeKit", targets: ["CodewakeKit"]),
+        .executable(name: "codewake", targets: ["Codewake"]),
     ],
     targets: [
-        .target(name: "CodewakerKit"),
-        .executableTarget(name: "Codewaker", dependencies: ["CodewakerKit"]),
-        .testTarget(name: "CodewakerKitTests", dependencies: ["CodewakerKit"]),
+        .target(name: "CodewakeKit"),
+        .executableTarget(name: "Codewake", dependencies: ["CodewakeKit"]),
+        .testTarget(name: "CodewakeKitTests", dependencies: ["CodewakeKit"]),
     ]
 )

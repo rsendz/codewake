@@ -16,6 +16,10 @@ public protocol HistoryProvider: Sendable {
     /// Contents of the given blobs, keyed by SHA. Missing or unreadable blobs are omitted.
     func loadBlobs(shas: [String]) async throws -> [String: String]
 
+    /// The commit graph, newest first, including merges. Used to recover branch structure,
+    /// which the linear commit list deliberately flattens away.
+    func loadGraph() async throws -> [CommitNode]
+
     /// Display name for the repository.
     var name: String { get }
 }

@@ -41,7 +41,11 @@ public struct GitCLIHistoryProvider: HistoryProvider {
         // occasional wrong link between two small files.
         "-M40%",
         "--no-color",
-        "--format=%x1e%H%x1f%an%x1f%ae%x1f%at%x1f%s",
+        // Committer date, not author date. git orders `log` by committer date, so using
+        // the author date would let the displayed timeline run backwards on a repository
+        // that rebases or cherry-picks. It is also the more meaningful of the two here:
+        // this app shows when work landed in the branch, not when it was first written.
+        "--format=%x1e%H%x1f%an%x1f%ae%x1f%ct%x1f%s",
     ]
 
     public func loadCommits() async throws -> [Commit] {
@@ -58,6 +62,33 @@ public struct GitCLIHistoryProvider: HistoryProvider {
         } catch let error as GitError {
             if case .commandFailed = error { throw GitError.notARepository(repositoryURL) }
             throw error
+        }
+    }
+
+    static let graphArguments = [
+        "log",
+        "--no-color",
+        // Newest first and including merges: the first-parent chain from the newest commit
+        // is the trunk, and the merges along it are what reveal the branches.
+        "--format=%H%x1f%P%x1f%ct%x1f%an%x1f%s",
+    ]
+
+    public func loadGraph() async throws -> [CommitNode] {
+        let output = try await runner.runText(Self.graphArguments)
+        return Self.parseGraph(output)
+    }
+
+    static func parseGraph(_ output: String) -> [CommitNode] {
+        output.split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: "\u{1f}", maxSplits: 4, omittingEmptySubsequences: false)
+            guard fields.count == 5, let timestamp = TimeInterval(fields[2]) else { return nil }
+            return CommitNode(
+                sha: String(fields[0]),
+                parents: fields[1].split(separator: " ").map(String.init),
+                date: Date(timeIntervalSince1970: timestamp),
+                authorName: String(fields[3]),
+                subject: String(fields[4])
+            )
         }
     }
 

@@ -25,6 +25,9 @@ public struct RepositorySummary: Sendable {
     public let name: String
     public let commits: [CommitSummary]
     public let fileCount: Int
+    /// Merged branches, oldest merge first.
+    public let branches: [Branch]
+    public let mergeCount: Int
 
     public var commitCount: Int { commits.count }
     public var dateRange: ClosedRange<Date> { commits[0].date...commits[commits.count - 1].date }
@@ -50,12 +53,15 @@ public struct FileDetail: Sendable {
     public let recentCommits: [CommitSummary]
     /// Commit counts by author, busiest first — the seed of a future ownership view.
     public let authors: [AuthorShare]
+    /// Files that tend to change in the same commits as this one.
+    public let coupling: [CouplingLink]
     public let wasRenamed: Bool
 }
 
 public enum LoadPhase: Sendable {
     case readingHistory
     case buildingTimelines
+    case readingBranches
     case ready
 }
 
@@ -97,23 +103,44 @@ public actor AnalysisEngine {
 
         progress(.buildingTimelines)
         let history = RepositoryHistory(name: provider.name, commits: commits, filter: filter)
+
+        var churnBySHA: [String: (churn: Int, files: Int)] = [:]
+        var timelineIndexBySHA: [String: Int] = [:]
+        churnBySHA.reserveCapacity(commits.count)
+        timelineIndexBySHA.reserveCapacity(commits.count)
+
+        let summaries = commits.enumerated().map { index, commit -> CommitSummary in
+            // Counted after filtering, so the timeline's activity graph shows the shape of
+            // the work rather than a spike everywhere a lock file was regenerated.
+            let counted = commit.changes.filter { filter.includes($0.path) }
+            let churn = counted.reduce(0) { $0 + $1.churn }
+            churnBySHA[commit.sha] = (churn, counted.count)
+            timelineIndexBySHA[commit.sha] = index
+            return CommitSummary(
+                index: index,
+                sha: commit.sha,
+                authorName: commit.authorName,
+                date: commit.date,
+                subject: commit.subject,
+                churn: churn,
+                filesTouched: counted.count
+            )
+        }
+
+        progress(.readingBranches)
+        // A repository with no merges simply has no branches to show, and a graph that
+        // cannot be read should not stop the rest of the app from working.
+        let graph = (try? await provider.loadGraph()) ?? []
+        let branches = BranchExtractor.branches(
+            from: graph, churnBySHA: churnBySHA, timelineIndexBySHA: timelineIndexBySHA
+        )
+
         let summary = RepositorySummary(
             name: history.name,
-            commits: commits.enumerated().map { index, commit in
-                // Counted after filtering, so the timeline's activity graph shows the shape
-                // of the work rather than a spike everywhere a lock file was regenerated.
-                let counted = commit.changes.filter { filter.includes($0.path) }
-                return CommitSummary(
-                    index: index,
-                    sha: commit.sha,
-                    authorName: commit.authorName,
-                    date: commit.date,
-                    subject: commit.subject,
-                    churn: counted.reduce(0) { $0 + $1.churn },
-                    filesTouched: counted.count
-                )
-            },
-            fileCount: history.files.count
+            commits: summaries,
+            fileCount: history.files.count,
+            branches: branches,
+            mergeCount: graph.count { $0.isMerge }
         )
 
         progress(.ready)
@@ -238,6 +265,7 @@ public actor AnalysisEngine {
             },
             recentCommits: applied.suffix(8).reversed().map { summary.commits[$0.commitIndex] },
             authors: authors,
+            coupling: snapshots.coupling(for: id),
             wasRenamed: timeline.wasRenamed
         )
     }

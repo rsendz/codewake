@@ -36,7 +36,7 @@ public struct GitRunner: Sendable {
     public let repositoryURL: URL
     private static let executable = URL(filePath: "/usr/bin/git")
     private static let queue = DispatchQueue(
-        label: "com.codewaker.git",
+        label: "com.codewake.git",
         qos: .userInitiated,
         attributes: .concurrent
     )
