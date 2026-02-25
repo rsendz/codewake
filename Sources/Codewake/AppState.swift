@@ -5,7 +5,8 @@
 //  Created by Luis Resendez on 21/02/2026.
 //
 
-import CodewakerKit
+import AppKit
+import CodewakeKit
 import Foundation
 import SwiftUI
 
@@ -26,16 +27,40 @@ final class AppState {
         case failed(String)
     }
 
+    enum ViewMode: String, CaseIterable, Identifiable {
+        case map = "Map"
+        case branches = "Branches"
+        var id: String { rawValue }
+
+        var symbol: String {
+            switch self {
+            case .map: "square.grid.2x2"
+            case .branches: "arrow.triangle.branch"
+            }
+        }
+    }
+
     private(set) var phase: Phase = .welcome
     private(set) var summary: RepositorySummary?
     private(set) var hotspots: [Hotspot] = []
     private(set) var statistics: SnapshotStatistics?
     private(set) var isRefining = false
+    private(set) var repositoryURL: URL?
 
     var commitIndex: Int = 0
     private(set) var selection: FileID?
     private(set) var detail: FileDetail?
     private(set) var isPlaying = false
+
+    var viewMode: ViewMode = .map
+    var selectedBranch: Branch.ID?
+    var searchText: String = ""
+    var isShowingHelp = false
+    /// Bumped to ask the search field to take focus. A plain Bool would not re-fire when
+    /// the shortcut is pressed twice in a row.
+    private(set) var focusSearchToken = 0
+    /// Multiplier on playback speed. At 1x the whole history plays in about 30 seconds.
+    var playbackSpeed: Double = 1
 
     private var engine: AnalysisEngine?
     private var refineTask: Task<Void, Never>?
@@ -69,8 +94,11 @@ final class AppState {
 
                 self.engine = engine
                 self.summary = engine.summary
+                self.repositoryURL = url
                 self.commitIndex = engine.summary.commitCount - 1
                 self.selection = nil
+                self.selectedBranch = nil
+                self.searchText = ""
                 self.detail = nil
                 self.phase = .ready
                 self.rememberRecent(url)
@@ -86,8 +114,8 @@ final class AppState {
     /// Opens a repository chosen at launch, so a demo or a debugging run can skip the file
     /// picker:
     ///
-    ///     CODEWAKER_REPO=~/some/repo swift run codewaker
-    ///     swift run codewaker -repo ~/some/repo
+    ///     CODEWAKE_REPO=~/some/repo swift run codewake
+    ///     swift run codewake -repo ~/some/repo
     ///
     /// Deliberately not a bare positional path: AppKit reads an argument like that as a
     /// request to open a document, and SwiftUI then withholds the `WindowGroup` window
@@ -96,7 +124,7 @@ final class AppState {
     /// harmless, so `-repo` is read straight back out of `UserDefaults`.
     func openLaunchRepository() {
         let flag = UserDefaults.standard.string(forKey: "repo")
-        let environment = ProcessInfo.processInfo.environment["CODEWAKER_REPO"]
+        let environment = ProcessInfo.processInfo.environment["CODEWAKE_REPO"]
         guard let path = flag ?? environment, !path.isEmpty else { return }
         open(URL(filePath: NSString(string: path).expandingTildeInPath))
     }
@@ -107,10 +135,13 @@ final class AppState {
         refineTask?.cancel()
         engine = nil
         summary = nil
+        repositoryURL = nil
         hotspots = []
         statistics = nil
         selection = nil
+        selectedBranch = nil
         detail = nil
+        searchText = ""
         phase = .welcome
     }
 
@@ -118,6 +149,7 @@ final class AppState {
         switch loadPhase {
         case .readingHistory: phase = .loading("Reading history…")
         case .buildingTimelines: phase = .loading("Building timelines…")
+        case .readingBranches: phase = .loading("Reading branches…")
         case .ready: break
         }
     }
@@ -168,11 +200,27 @@ final class AppState {
         scrub(to: commitIndex + delta)
     }
 
+    func focusSearch() {
+        viewMode = .map
+        focusSearchToken += 1
+    }
+
+    func jumpToStart() { scrub(to: 0) }
+
+    func jumpToEnd() {
+        guard let summary else { return }
+        scrub(to: summary.commitCount - 1)
+    }
+
     // MARK: - Playback
 
-    /// Commits per second during playback. Fast enough to feel like footage, slow enough
-    /// that the treemap reads as changing rather than flickering.
-    private static let playbackRate = 24.0
+    /// Steps per second. Fixed, so playback stays smooth; speed changes how many commits
+    /// each step advances instead.
+    private static let stepsPerSecond = 20.0
+    /// Seconds the whole history takes to play at 1x.
+    private static let playbackDuration = 30.0
+
+    static let playbackSpeeds: [Double] = [0.5, 1, 2, 4]
 
     func togglePlayback() {
         isPlaying ? stopPlayback() : startPlayback()
@@ -184,18 +232,24 @@ final class AppState {
         isPlaying = true
 
         playbackTask = Task {
-            // A long history plays back in a fixed span rather than taking an hour.
-            let stride = max(1, summary.commitCount / 600)
             while !Task.isCancelled, self.commitIndex < summary.commitCount - 1 {
-                try? await Task.sleep(for: .seconds(1 / Self.playbackRate))
+                try? await Task.sleep(for: .seconds(1 / Self.stepsPerSecond))
                 guard !Task.isCancelled else { break }
                 // Refining mid-playback would queue git reads faster than they complete.
-                self.scrub(to: self.commitIndex + stride, refine: false)
+                self.scrub(to: self.commitIndex + self.commitsPerStep, refine: false)
             }
             self.isPlaying = false
             // Settle on an exact reading wherever playback stopped.
             self.scrub(to: self.commitIndex)
         }
+    }
+
+    /// A long history plays back in a fixed span rather than taking an hour, so the same
+    /// speed setting means the same thing whatever repository is open.
+    private var commitsPerStep: Int {
+        guard let summary else { return 1 }
+        let total = Self.playbackDuration * Self.stepsPerSecond
+        return max(1, Int((Double(summary.commitCount) / total * playbackSpeed).rounded()))
     }
 
     private func stopPlayback() {
@@ -212,6 +266,14 @@ final class AppState {
         refreshDetail()
     }
 
+    func select(branch id: Branch.ID?) {
+        selectedBranch = id
+        guard let id, let branch = summary?.branches.first(where: { $0.id == id }) else { return }
+        // Move the playhead to the moment the branch's work had all landed, so switching
+        // back to the map shows the codebase as that branch left it.
+        scrub(to: branch.timelineIndex)
+    }
+
     private func refreshDetail() {
         detailTask?.cancel()
         guard let engine, let id = selection else {
@@ -226,6 +288,17 @@ final class AppState {
         }
     }
 
+    func revealSelectionInFinder() {
+        guard let repositoryURL, let path = detail?.snapshot.path else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([repositoryURL.appending(path: path)])
+    }
+
+    func copySelectionPath() {
+        guard let path = detail?.snapshot.path else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(path, forType: .string)
+    }
+
     // MARK: - Derived values for the UI
 
     var currentCommit: CommitSummary? {
@@ -236,5 +309,24 @@ final class AppState {
     var isReady: Bool {
         if case .ready = phase { return true }
         return false
+    }
+
+    var branch: Branch? {
+        guard let id = selectedBranch else { return nil }
+        return summary?.branches.first { $0.id == id }
+    }
+
+    /// Partner files of the current selection, by how tightly they are coupled to it.
+    var coupledFiles: [FileID: Double] {
+        guard let coupling = detail?.coupling else { return [:] }
+        return Dictionary(coupling.map { ($0.id, $0.degree) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    /// Files matching the search box. Nil when there is no active search, which the map
+    /// reads as "do not dim anything".
+    var searchMatches: Set<FileID>? {
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return nil }
+        return Set(hotspots.filter { $0.path.lowercased().contains(query) }.map(\.id))
     }
 }

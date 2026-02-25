@@ -5,13 +5,16 @@
 //  Created by Luis Resendez on 21/02/2026.
 //
 
-import CodewakerKit
+import CodewakeKit
 import SwiftUI
 
 /// Inspector for the selected file: what it is now, and how it got that way.
 struct FileDetailView: View {
     let detail: FileDetail?
     let hotspot: Hotspot?
+    let onSelectFile: (FileID) -> Void
+    let onReveal: () -> Void
+    let onCopyPath: () -> Void
 
     var body: some View {
         ScrollView {
@@ -49,6 +52,7 @@ struct FileDetailView: View {
             heading(detail)
             if let hotspot { risk(hotspot) }
             measures(detail)
+            if !detail.coupling.isEmpty { coupling(detail) }
             if !detail.churnHistory.isEmpty { churn(detail) }
             if !detail.authors.isEmpty { authors(detail) }
             if !detail.recentCommits.isEmpty { commits(detail) }
@@ -58,7 +62,7 @@ struct FileDetailView: View {
     }
 
     private func heading(_ detail: FileDetail) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             Text(detail.snapshot.path.split(separator: "/").last.map(String.init) ?? "")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Palette.primaryText)
@@ -71,11 +75,20 @@ struct FileDetailView: View {
                     .font(.system(size: 10))
                     .foregroundStyle(Palette.secondaryText)
             }
+
+            HStack(spacing: 6) {
+                Button("Copy Path", action: onCopyPath)
+                Button("Reveal", action: onReveal)
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 10))
+            .foregroundStyle(Palette.secondaryText)
+            .padding(.top, 2)
         }
     }
 
     private func risk(_ hotspot: Hotspot) -> some View {
-        Section("Hotspot score") {
+        InspectorSection("Hotspot score") {
             VStack(alignment: .leading, spacing: 8) {
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
@@ -103,35 +116,60 @@ struct FileDetailView: View {
     }
 
     private func measures(_ detail: FileDetail) -> some View {
-        Section("At this commit") {
+        InspectorSection("At this commit") {
             VStack(spacing: 5) {
-                measure("Lines", detail.snapshot.approximateLines.formatted())
-                measure("Commits", detail.snapshot.commitCount.formatted())
-                measure("Lines churned", detail.snapshot.churn.formatted())
+                InspectorRow("Lines", detail.snapshot.approximateLines.formatted())
+                InspectorRow("Commits", detail.snapshot.commitCount.formatted())
+                InspectorRow("Lines churned", detail.snapshot.churn.formatted())
                 if let complexity = detail.complexity {
-                    measure("Deepest nesting", complexity.max.formatted())
-                    measure("Mean nesting", complexity.mean.formatted(.number.precision(.fractionLength(1))))
+                    InspectorRow("Deepest nesting", complexity.max.formatted())
+                    InspectorRow("Mean nesting", complexity.mean.formatted(.number.precision(.fractionLength(1))))
                 }
             }
         }
     }
 
-    private func measure(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(Palette.secondaryText)
-            Spacer()
-            Text(value)
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundStyle(Palette.primaryText)
+    /// The files this one keeps being edited alongside. Clicking through follows the
+    /// relationship, which is how a coupled cluster gets explored.
+    private func coupling(_ detail: FileDetail) -> some View {
+        InspectorSection("Usually changes with") {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(detail.coupling) { link in
+                    Button {
+                        onSelectFile(link.id)
+                    } label: {
+                        HStack(spacing: 6) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(link.path.split(separator: "/").last.map(String.init) ?? link.path)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Palette.primaryText)
+                                    .lineLimit(1)
+                                Text("\(link.sharedCommits) shared commits")
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(Palette.faintText)
+                            }
+                            Spacer(minLength: 4)
+                            Text("\(link.percentage)%")
+                                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                                .foregroundStyle(Palette.accent)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("\(link.path) — changed in \(link.percentage)% of this file's commits")
+                }
+
+                Text("Outlined on the map.")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.faintText)
+            }
         }
     }
 
     /// Churn per commit over the file's life — the shape that shows whether a file is
     /// settling down or still being fought over.
     private func churn(_ detail: FileDetail) -> some View {
-        Section("Churn over time") {
+        InspectorSection("Churn over time") {
             let peak = Double(detail.churnHistory.map(\.churn).max() ?? 1)
             Canvas { context, size in
                 let count = detail.churnHistory.count
@@ -156,26 +194,20 @@ struct FileDetailView: View {
 
     private func authors(_ detail: FileDetail) -> some View {
         let total = max(detail.authors.reduce(0) { $0 + $1.commits }, 1)
-        return Section("Who touched it") {
+        return InspectorSection("Who touched it") {
             VStack(spacing: 5) {
                 ForEach(detail.authors.prefix(5)) { author in
-                    HStack(spacing: 6) {
-                        Text(author.name)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Palette.primaryText)
-                            .lineLimit(1)
-                        Spacer(minLength: 4)
-                        Text("\(Int((Double(author.commits) / Double(total) * 100).rounded()))%")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(Palette.faintText)
-                    }
+                    InspectorRow(
+                        author.name,
+                        "\(Int((Double(author.commits) / Double(total) * 100).rounded()))%"
+                    )
                 }
             }
         }
     }
 
     private func commits(_ detail: FileDetail) -> some View {
-        Section("Recent commits") {
+        InspectorSection("Recent commits") {
             VStack(alignment: .leading, spacing: 7) {
                 ForEach(detail.recentCommits) { commit in
                     VStack(alignment: .leading, spacing: 1) {
@@ -194,27 +226,5 @@ struct FileDetailView: View {
 
     private func percent(_ value: Double) -> String {
         "\(Int((value * 100).rounded()))%"
-    }
-
-    /// Small labelled block, so every section in the inspector reads the same way.
-    private struct Section<Content: View>: View {
-        let title: String
-        @ViewBuilder let content: Content
-
-        init(_ title: String, @ViewBuilder content: () -> Content) {
-            self.title = title
-            self.content = content()
-        }
-
-        var body: some View {
-            VStack(alignment: .leading, spacing: 7) {
-                Text(title.uppercased())
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundStyle(Palette.faintText)
-                content
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 }

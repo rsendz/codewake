@@ -5,7 +5,7 @@
 //  Created by Luis Resendez on 21/02/2026.
 //
 
-import CodewakerKit
+import CodewakeKit
 import SwiftUI
 
 /// The hotspot map: every file that exists right now, sized by length, coloured by how
@@ -13,6 +13,11 @@ import SwiftUI
 struct TreemapView: View {
     let hotspots: [Hotspot]
     let selection: FileID?
+    /// Partner files of the selection, by coupling strength. Drawn as outlines so a
+    /// selected file's hidden relationships become visible across the whole map.
+    let coupled: [FileID: Double]
+    /// Files matching the search box, or nil when nothing is being searched.
+    let searchMatches: Set<FileID>?
     let onSelect: (FileID?) -> Void
 
     @State private var hovered: TreemapTile?
@@ -81,11 +86,25 @@ struct TreemapView: View {
             let relative = heat(tile.hotspot.score)
             let isSelected = tile.id == selection
             let isHovered = tile.id == hovered?.id
+            let couplingDegree = coupled[tile.id]
+
+            // A search dims everything it does not match, rather than hiding it: the map's
+            // shape is the context that makes a match meaningful.
+            var opacity = tile.hotspot.isEstimated ? 0.72 : 1.0
+            if let searchMatches, !searchMatches.contains(tile.id) { opacity *= 0.22 }
 
             context.fill(
                 Path(roundedRect: tile.frame, cornerRadius: 1.5),
-                with: .color(Palette.hotspot(relative).opacity(tile.hotspot.isEstimated ? 0.72 : 1))
+                with: .color(Palette.hotspot(relative).opacity(opacity))
             )
+
+            if let couplingDegree, !isSelected {
+                context.stroke(
+                    Path(roundedRect: tile.frame.insetBy(dx: -0.5, dy: -0.5), cornerRadius: 2),
+                    with: .color(Palette.coupling.opacity(0.45 + couplingDegree * 0.55)),
+                    lineWidth: 1.5
+                )
+            }
             if isSelected || isHovered {
                 context.stroke(
                     Path(roundedRect: tile.frame.insetBy(dx: -0.5, dy: -0.5), cornerRadius: 2),
@@ -99,7 +118,10 @@ struct TreemapView: View {
                 context.draw(
                     Text(tile.name)
                         .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(relative > 0.5 ? Color.black.opacity(0.75) : Palette.primaryText),
+                        .foregroundStyle(
+                            (relative > 0.5 ? Color.black.opacity(0.75) : Palette.primaryText)
+                                .opacity(opacity)
+                        ),
                     in: tile.frame.insetBy(dx: 3, dy: 2)
                 )
             }
@@ -145,6 +167,11 @@ struct TreemapView: View {
             Text("\(hotspot.file.churn.formatted()) lines churned · \(hotspot.file.commitCount.formatted()) commits · \(hotspot.file.approximateLines.formatted()) lines")
                 .font(.system(size: 10))
                 .foregroundStyle(Palette.secondaryText)
+            if let degree = coupled[tile.id] {
+                Text("changes with the selected file \(Int((degree * 100).rounded()))% of the time")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Palette.coupling)
+            }
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

@@ -5,7 +5,7 @@
 //  Created by Luis Resendez on 21/02/2026.
 //
 
-import CodewakerKit
+import CodewakeKit
 import SwiftUI
 
 /// The scrubber: commit activity over time, with a playhead you drag through history.
@@ -13,6 +13,7 @@ struct TimelineView: View {
     let commits: [CommitSummary]
     let commitIndex: Int
     let isPlaying: Bool
+    @Binding var speed: Double
     let onScrub: (Int) -> Void
     let onTogglePlayback: () -> Void
 
@@ -44,6 +45,8 @@ struct TimelineView: View {
             .foregroundStyle(Palette.primaryText)
             .help(isPlaying ? "Pause" : "Play history")
 
+            speedControl
+
             if let commit = commits[safe: commitIndex] {
                 Text(commit.shortSHA)
                     .font(.system(size: 10, design: .monospaced))
@@ -64,6 +67,33 @@ struct TimelineView: View {
                 Spacer()
             }
         }
+    }
+
+    /// Playback speed. Expressed as a multiplier because the underlying rate is scaled to
+    /// the repository — at 1x any history, long or short, plays in about half a minute.
+    private var speedControl: some View {
+        Menu {
+            ForEach(AppState.playbackSpeeds, id: \.self) { option in
+                Button {
+                    speed = option
+                } label: {
+                    if option == speed { Label(label(for: option), systemImage: "checkmark") }
+                    else { Text(label(for: option)) }
+                }
+            }
+        } label: {
+            Text(label(for: speed))
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .foregroundStyle(Palette.secondaryText)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Playback speed — at 1x the whole history plays in about 30 seconds")
+    }
+
+    private func label(for speed: Double) -> String {
+        speed == speed.rounded() ? "\(Int(speed))x" : "\(speed.formatted())x"
     }
 
     // MARK: - Track

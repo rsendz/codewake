@@ -53,7 +53,7 @@ struct WelcomeView: View {
             Image(systemName: "square.stack.3d.down.right.fill")
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Palette.accent)
-            Text("Codewaker")
+            Text("Codewake")
                 .font(.system(size: 27, weight: .semibold))
                 .foregroundStyle(Palette.primaryText)
             Text("Scrub through a repository's history and watch its hotspots move.")

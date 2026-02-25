@@ -18,6 +18,9 @@ enum Palette {
     static let secondaryText = Color.white.opacity(0.52)
     static let faintText = Color.white.opacity(0.34)
     static let accent = Color(red: 0.98, green: 0.62, blue: 0.24)
+    /// Deliberately outside the heat ramp: coupling is a different kind of fact from
+    /// temperature, and must not read as "slightly hotter".
+    static let coupling = Color(red: 0.45, green: 0.78, blue: 0.98)
 
     /// Cool for quiet code, hot for code that is both complex and frequently changed.
     /// Stops are interpolated pairwise so the ramp never drifts through a muddy midpoint
