@@ -8,7 +8,7 @@
 import Foundation
 import Testing
 
-@testable import CodewakerKit
+@testable import CodewakeKit
 
 /// Real output captured from `git log --raw --numstat --no-abbrev -M` on a scratch
 /// repository covering an add, a rename with edits, a binary file, and a delete.

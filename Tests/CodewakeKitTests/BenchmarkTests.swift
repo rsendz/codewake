@@ -8,16 +8,16 @@
 import Foundation
 import Testing
 
-@testable import CodewakerKit
+@testable import CodewakeKit
 
-/// Measures the engine against a real repository. Skipped unless `CODEWAKER_BENCH_REPO`
+/// Measures the engine against a real repository. Skipped unless `CODEWAKE_BENCH_REPO`
 /// points at one, so a checkout with no large repository to hand still runs green:
 ///
-///     CODEWAKER_BENCH_REPO=~/some/repo swift test --filter Benchmarks
+///     CODEWAKE_BENCH_REPO=~/some/repo swift test --filter Benchmarks
 @Suite("Benchmarks", .serialized)
 struct BenchmarkTests {
     private var repositoryURL: URL? {
-        ProcessInfo.processInfo.environment["CODEWAKER_BENCH_REPO"]
+        ProcessInfo.processInfo.environment["CODEWAKE_BENCH_REPO"]
             .map { URL(filePath: NSString(string: $0).expandingTildeInPath) }
     }
 
@@ -51,6 +51,12 @@ struct BenchmarkTests {
         let perStep = scrubTime / Double(steps) * 1000
         print("scrub: \(perStep.formatted(.number.precision(.fractionLength(2))))ms per step")
         #expect(perStep < 16, "scrubbing must keep up with a 60fps drag")
+
+        let branches = loaded.summary.branches
+        print("branches: \(branches.count) merged, \(loaded.summary.mergeCount) merge commits")
+        for branch in branches.sorted(by: { $0.churn > $1.churn }).prefix(5) {
+            print("  \(branch.name) — \(branch.commitCount) commits, \(branch.churn) churn, \(branch.days)d")
+        }
 
         let refineTime = await seconds { _ = try? await loaded.refine(at: commits - 1) }
         print("first refine at HEAD: \(refineTime.formatted(.number.precision(.fractionLength(2))))s")

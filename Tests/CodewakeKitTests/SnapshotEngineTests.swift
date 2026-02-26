@@ -8,7 +8,7 @@
 import Foundation
 import Testing
 
-@testable import CodewakerKit
+@testable import CodewakeKit
 
 /// Builds histories by hand so scrubbing can be checked against known outcomes.
 enum HistoryFixture {

@@ -8,7 +8,7 @@
 import Foundation
 import Testing
 
-@testable import CodewakerKit
+@testable import CodewakeKit
 
 /// Drives the real `git` binary against a repository built for the test, so the argument
 /// list and the parser are checked against git's actual output rather than a fixture that
@@ -17,7 +17,7 @@ import Testing
 struct GitIntegrationTests {
     private func makeRepository() throws -> URL {
         let url = URL(filePath: NSTemporaryDirectory())
-            .appending(path: "codewaker-test-\(UUID().uuidString)")
+            .appending(path: "codewake-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
 
         /// Fails loudly: a fixture command that quietly does nothing shows up later as a
@@ -107,6 +107,11 @@ struct GitIntegrationTests {
 
         let statistics = await engine.statistics(at: 0)
         #expect(statistics.fileCount == 2)
+
+        // Timeline order and displayed dates must agree, or scrubbing forward would
+        // sometimes show an earlier date than the commit before it.
+        let dates = engine.summary.commits.map(\.date)
+        #expect(zip(dates, dates.dropFirst()).allSatisfy { $0 <= $1 })
     }
 
     @Test("File detail reports every author who touched the file")
@@ -145,7 +150,7 @@ struct GitIntegrationTests {
     @Test("A directory that is not a repository reports that clearly")
     func notARepository() async throws {
         let directory = URL(filePath: NSTemporaryDirectory())
-            .appending(path: "codewaker-empty-\(UUID().uuidString)")
+            .appending(path: "codewake-empty-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { cleanUp(directory) }
 

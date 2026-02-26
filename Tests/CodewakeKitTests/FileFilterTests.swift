@@ -8,7 +8,7 @@
 import Foundation
 import Testing
 
-@testable import CodewakerKit
+@testable import CodewakeKit
 
 @Suite("File filter")
 struct FileFilterTests {
@@ -16,7 +16,7 @@ struct FileFilterTests {
         "Keeps source files",
         arguments: [
             "src/app.swift",
-            "Sources/CodewakerKit/Analysis/HotspotAnalyzer.swift",
+            "Sources/CodewakeKit/Analysis/HotspotAnalyzer.swift",
             "README.md",
             "lib/vendors.ts",             // "vendors" is not the "vendor" directory
             "app/build_config.py",        // "build_config" is not the "build" directory

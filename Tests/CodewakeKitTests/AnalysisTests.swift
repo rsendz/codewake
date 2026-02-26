@@ -9,7 +9,7 @@ import CoreGraphics
 import Foundation
 import Testing
 
-@testable import CodewakerKit
+@testable import CodewakeKit
 
 @Suite("Indentation complexity")
 struct IndentationComplexityTests {
