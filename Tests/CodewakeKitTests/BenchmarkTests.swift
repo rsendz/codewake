@@ -5,6 +5,7 @@
 //  Created by Luis Resendez on 20/02/2026.
 //
 
+import CoreGraphics
 import Foundation
 import Testing
 
@@ -21,6 +22,32 @@ struct BenchmarkTests {
             .map { URL(filePath: NSString(string: $0).expandingTildeInPath) }
     }
 
+    /// Real memory charged to this process, which is what a user would see in Activity
+    /// Monitor rather than the much larger virtual size.
+    private func footprintBytes() -> Int {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+        let status = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return status == KERN_SUCCESS ? Int(info.phys_footprint) : 0
+    }
+
+    private func megabytes(_ bytes: Int) -> String {
+        (Double(bytes) / 1_048_576).formatted(.number.precision(.fractionLength(0))) + " MB"
+    }
+
+    private func seconds(_ body: () throws -> Void) rethrows -> Double {
+        let start = ContinuousClock.now
+        try body()
+        return Double(start.duration(to: .now).components.attoseconds) / 1e18
+            + Double(start.duration(to: .now).components.seconds)
+    }
+
     private func seconds(_ body: () async throws -> Void) async rethrows -> Double {
         let start = ContinuousClock.now
         try await body()
@@ -32,13 +59,23 @@ struct BenchmarkTests {
     func realRepository() async throws {
         guard let url = repositoryURL else { return }
 
+        // Timed per phase, because on a large repository the wait is long enough that
+        // knowing which part of it is slow is the whole point.
+        nonisolated(unsafe) var marks: [(LoadPhase, ContinuousClock.Instant)] = []
         var engine: AnalysisEngine?
         let loadTime = await seconds {
-            engine = try? await AnalysisEngine.load(from: GitCLIHistoryProvider(repositoryURL: url))
+            engine = try? await AnalysisEngine.load(from: GitCLIHistoryProvider(repositoryURL: url)) {
+                marks.append(($0, .now))
+            }
         }
         let loaded = try #require(engine)
         let commits = loaded.summary.commitCount
         print("load: \(commits) commits, \(loaded.summary.fileCount) files in \(loadTime.formatted(.number.precision(.fractionLength(2))))s")
+        for (mark, next) in zip(marks, marks.dropFirst()) {
+            let elapsed = Double(mark.1.duration(to: next.1).components.seconds)
+                + Double(mark.1.duration(to: next.1).components.attoseconds) / 1e18
+            print("  \(mark.0): \(elapsed.formatted(.number.precision(.fractionLength(2))))s")
+        }
 
         // Simulates a drag across the whole history: the cached path must stay well under
         // a frame per step or scrubbing will visibly stutter.
@@ -58,6 +95,31 @@ struct BenchmarkTests {
             print("  \(branch.name) — \(branch.commitCount) commits, \(branch.churn) churn, \(branch.days)d")
         }
 
+        // Ownership walks every live file rather than the top few hundred, so it is the
+        // one query whose cost scales with the size of the repository rather than with the
+        // size of the view. It runs once when the playhead settles.
+        var report: OwnershipReport?
+        let ownershipTime = await seconds { report = await loaded.ownership(at: commits - 1) }
+        let ownership = try #require(report)
+        print("ownership: \(ownership.totalFiles) files, \(ownership.authors.count) authors, bus factor \(ownership.busFactor) in \((ownershipTime * 1000).formatted(.number.precision(.fractionLength(0))))ms")
+        #expect(ownershipTime < 2.0, "ownership must not stall the settle after a scrub")
+
+        let cachedOwnership = await seconds { _ = await loaded.ownership(at: commits - 1) }
+        print("cached ownership: \((cachedOwnership * 1000).formatted(.number.precision(.fractionLength(2))))ms")
+
+        // The treemap is laid out from scratch on every draw, so it has to be cheap at the
+        // size the view actually asks for.
+        let hotspots = await loaded.hotspots(at: commits - 1)
+        let layoutTime = seconds {
+            for _ in 0..<50 {
+                _ = TreemapLayout.layout(
+                    hotspots: hotspots, in: CGRect(x: 0, y: 0, width: 1200, height: 800)
+                )
+            }
+        }
+        print("treemap layout: \(hotspots.count) tiles in \((layoutTime / 50 * 1000).formatted(.number.precision(.fractionLength(2))))ms")
+        #expect(layoutTime / 50 < 0.016, "layout must fit inside a frame")
+
         let refineTime = await seconds { _ = try? await loaded.refine(at: commits - 1) }
         print("first refine at HEAD: \(refineTime.formatted(.number.precision(.fractionLength(2))))s")
 
@@ -65,5 +127,7 @@ struct BenchmarkTests {
         let cachedRefine = await seconds { _ = try? await loaded.refine(at: commits - 1) }
         print("cached refine: \((cachedRefine * 1000).formatted(.number.precision(.fractionLength(2))))ms")
         #expect(cachedRefine < refineTime)
+
+        print("memory: \(megabytes(footprintBytes())) resident with the repository loaded")
     }
 }

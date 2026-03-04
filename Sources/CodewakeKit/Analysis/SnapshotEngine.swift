@@ -181,3 +181,123 @@ extension SnapshotEngine {
         .map { $0 }
     }
 }
+
+// MARK: - Ownership
+
+extension SnapshotEngine {
+    /// Who owns what across the whole repository, as of the current position.
+    ///
+    /// Unlike coupling, this cannot be answered for one file on demand — the question is
+    /// about the shape of the whole codebase — so it walks every live file's applied
+    /// events once. That is a pass over the history that has actually been scrubbed
+    /// through, which is why the caller runs it when the playhead settles rather than on
+    /// every frame, and caches the answer per position.
+    public func ownership() -> OwnershipReport {
+        var files: [FileOwnership] = []
+        files.reserveCapacity(aliveFileCount)
+
+        var accumulators: [String: AuthorAccumulator] = [:]
+        var soleAuthoredFiles = 0
+        var soleAuthoredLines = 0
+        var totalLines = 0
+
+        // One scratch dictionary reused across files, so counting authors per file does not
+        // allocate a fresh table for each of thousands of files.
+        var counts: [String: Int] = [:]
+
+        for id in 0..<states.count where isAlive(id) {
+            let applied = states[id].appliedEvents
+            guard applied > 0 else { continue }
+
+            counts.removeAll(keepingCapacity: true)
+            for event in history.files[id].events.prefix(applied) {
+                counts[history.commits[event.commitIndex].authorName, default: 0] += 1
+            }
+            guard !counts.isEmpty else { continue }
+
+            // Ties break on name, so the map does not change colour between two runs that
+            // saw exactly the same history.
+            let top = counts.max { ($0.value, $1.key) < ($1.value, $0.key) }!
+            let lines = max(states[id].lines, 0)
+            let isSole = counts.count == 1
+
+            files.append(FileOwnership(
+                id: id,
+                path: history.files[id].path(at: commitIndex),
+                lines: lines,
+                commits: applied,
+                authorCount: counts.count,
+                owner: top.key,
+                ownerCommits: top.value
+            ))
+
+            totalLines += lines
+            if isSole {
+                soleAuthoredFiles += 1
+                soleAuthoredLines += lines
+            }
+
+            for author in counts.keys {
+                accumulators[author, default: AuthorAccumulator()].touchedFiles += 1
+            }
+            accumulators[top.key, default: AuthorAccumulator()].add(
+                lines: lines, soleAuthored: isSole
+            )
+        }
+
+        let authors = accumulators
+            .map { $0.value.report(name: $0.key) }
+            .sorted { ($0.ownedLines, $1.name) > ($1.ownedLines, $0.name) }
+
+        return OwnershipReport(
+            commitIndex: commitIndex,
+            files: files.sorted { ($0.lines, $1.path) > ($1.lines, $0.path) },
+            authors: authors,
+            totalFiles: files.count,
+            totalLines: totalLines,
+            soleAuthoredFiles: soleAuthoredFiles,
+            soleAuthoredLines: soleAuthoredLines,
+            busFactor: Self.busFactor(authors: authors, totalLines: totalLines)
+        )
+    }
+
+    /// How many of the biggest owners it takes to cover half the codebase.
+    static func busFactor(authors: [AuthorOwnership], totalLines: Int) -> Int {
+        guard totalLines > 0 else { return authors.isEmpty ? 0 : 1 }
+        let half = Double(totalLines) / 2
+        var covered = 0.0
+        for (count, author) in authors.enumerated() {
+            covered += Double(author.ownedLines)
+            if covered >= half { return count + 1 }
+        }
+        return authors.count
+    }
+
+    private struct AuthorAccumulator {
+        var ownedFiles = 0
+        var ownedLines = 0
+        var soleAuthoredFiles = 0
+        var soleAuthoredLines = 0
+        var touchedFiles = 0
+
+        mutating func add(lines: Int, soleAuthored: Bool) {
+            ownedFiles += 1
+            ownedLines += lines
+            if soleAuthored {
+                soleAuthoredFiles += 1
+                soleAuthoredLines += lines
+            }
+        }
+
+        func report(name: String) -> AuthorOwnership {
+            AuthorOwnership(
+                name: name,
+                ownedFiles: ownedFiles,
+                ownedLines: ownedLines,
+                soleAuthoredFiles: soleAuthoredFiles,
+                soleAuthoredLines: soleAuthoredLines,
+                touchedFiles: touchedFiles
+            )
+        }
+    }
+}

@@ -84,6 +84,9 @@ public actor AnalysisEngine {
     private let provider: any HistoryProvider
     private var snapshots: SnapshotEngine
     private let complexity = ComplexityCache()
+    /// Ownership costs a pass over every live file's history, so the answer for a position
+    /// is kept until the playhead moves off it.
+    private var ownershipCache: OwnershipReport?
     /// Immutable once loaded, so the UI can read repository metadata without awaiting.
     public nonisolated let summary: RepositorySummary
 
@@ -214,6 +217,22 @@ public actor AnalysisEngine {
         guard !unknown.isEmpty else { return }
         let blobs = try await provider.loadBlobs(shas: unknown)
         complexity.store(blobs: blobs, requested: unknown)
+    }
+
+    // MARK: - Ownership
+
+    /// Who owns what across the whole repository at `index`.
+    ///
+    /// Only worth asking once the playhead settles: it walks every live file rather than
+    /// the top few hundred, which is too much work to repeat inside a drag.
+    public func ownership(at index: Int) -> OwnershipReport {
+        snapshots.move(to: index)
+        if let cached = ownershipCache, cached.commitIndex == snapshots.commitIndex {
+            return cached
+        }
+        let report = snapshots.ownership()
+        ownershipCache = report
+        return report
     }
 
     public func statistics(at index: Int) -> SnapshotStatistics {
