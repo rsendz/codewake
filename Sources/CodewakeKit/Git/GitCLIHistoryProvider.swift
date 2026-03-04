@@ -50,7 +50,9 @@ public struct GitCLIHistoryProvider: HistoryProvider {
 
     public func loadCommits() async throws -> [Commit] {
         try await validateRepository()
-        let output = try await runner.runText(Self.logArguments)
+        // Parsed straight from stdout: on a large history this log is tens of megabytes,
+        // and decoding it into a `String` first is a wasted pass over all of it.
+        let output = try await runner.run(Self.logArguments)
         let commits = GitLogParser.parse(output)
         guard !commits.isEmpty else { throw GitError.emptyHistory }
         return commits
