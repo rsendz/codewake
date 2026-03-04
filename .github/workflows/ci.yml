@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version
+
+      - name: Test
+        run: swift test
+
+      # The README claims a warning-free release build; this is what keeps that true.
+      - name: Release build, warnings are errors
+        run: swift build -c release -Xswiftc -warnings-as-errors
+
+  app:
+    name: Package the app
+    runs-on: macos-latest
+    needs: test
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Scripts/bundle.sh reads the version out of `git describe`.
+          fetch-depth: 0
+
+      - name: Build Codewake.app
+        run: ./Scripts/bundle.sh
+
+      - name: Check the bundle launches far enough to parse its own arguments
+        run: |
+          # A GitHub runner has no window server, so the app cannot be run for real. What
+          # can be checked is that the bundle is well formed and the binary links.
+          plutil -lint dist/Codewake.app/Contents/Info.plist
+          codesign --verify --strict --verbose=2 dist/Codewake.app
+          lipo -archs dist/Codewake.app/Contents/MacOS/Codewake
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codewake-app
+          path: dist/Codewake.zip
+          if-no-files-found: error
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/Codewake.zip \
+            --title "$GITHUB_REF_NAME" --generate-notes \
+            || gh release upload "$GITHUB_REF_NAME" dist/Codewake.zip --clobber
