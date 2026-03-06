@@ -8,12 +8,29 @@
 import CoreGraphics
 import Foundation
 
+/// One file reduced to what the layout actually needs: an identity, a path to group and
+/// label it by, and an area. Keeping the layout blind to the rest means the same geometry
+/// serves the hotspot map and the ownership map, and each view looks up its own model by
+/// id rather than the layout carrying both.
+public struct TreemapEntry: Sendable, Identifiable, Hashable {
+    public let id: FileID
+    public let path: String
+    public let area: Double
+
+    public init(id: FileID, path: String, area: Double) {
+        self.id = id
+        self.path = path
+        self.area = area
+    }
+}
+
 public struct TreemapTile: Sendable, Identifiable {
-    public let hotspot: Hotspot
+    public let entry: TreemapEntry
     public let frame: CGRect
 
-    public var id: FileID { hotspot.id }
-    public var name: String { String(hotspot.path.split(separator: "/").last ?? "") }
+    public var id: FileID { entry.id }
+    public var path: String { entry.path }
+    public var name: String { String(entry.path.split(separator: "/").last ?? "") }
 }
 
 public struct TreemapGroup: Sendable, Identifiable {
@@ -45,9 +62,23 @@ public enum TreemapLayout {
         headerHeight: CGFloat = 16,
         padding: CGFloat = 2
     ) -> [TreemapGroup] {
-        guard !hotspots.isEmpty, bounds.width > 1, bounds.height > 1 else { return [] }
+        layout(
+            entries: hotspots.map {
+                TreemapEntry(id: $0.id, path: $0.path, area: Double($0.file.approximateLines))
+            },
+            in: bounds, headerHeight: headerHeight, padding: padding
+        )
+    }
 
-        let groups = group(hotspots)
+    public static func layout(
+        entries: [TreemapEntry],
+        in bounds: CGRect,
+        headerHeight: CGFloat = 16,
+        padding: CGFloat = 2
+    ) -> [TreemapGroup] {
+        guard !entries.isEmpty, bounds.width > 1, bounds.height > 1 else { return [] }
+
+        let groups = group(entries)
         let frames = squarify(groups.map(\.value), in: bounds)
 
         return zip(groups, frames).compactMap { group, frame in
@@ -64,12 +95,12 @@ public enum TreemapLayout {
                 ? padded.divided(atDistance: headerHeight, from: .minYEdge).remainder
                 : padded
 
-            let sorted = group.hotspots.sorted { area(of: $0) > area(of: $1) }
+            let sorted = group.entries.sorted { area(of: $0) > area(of: $1) }
             let tileFrames = squarify(sorted.map(area(of:)), in: content)
-            let tiles = zip(sorted, tileFrames).compactMap { hotspot, tileFrame -> TreemapTile? in
+            let tiles = zip(sorted, tileFrames).compactMap { entry, tileFrame -> TreemapTile? in
                 let inset = tileFrame.insetBy(dx: 0.5, dy: 0.5)
                 guard inset.width > 1, inset.height > 1 else { return nil }
-                return TreemapTile(hotspot: hotspot, frame: inset)
+                return TreemapTile(entry: entry, frame: inset)
             }
 
             return TreemapGroup(
@@ -83,25 +114,25 @@ public enum TreemapLayout {
 
     /// Files are sized by length. Zero-line files (binaries, emptied files) still get a
     /// sliver so they do not silently vanish from the view.
-    private static func area(of hotspot: Hotspot) -> Double {
-        Double(max(hotspot.file.approximateLines, 1))
+    private static func area(of entry: TreemapEntry) -> Double {
+        max(entry.area, 1)
     }
 
     // MARK: - Grouping
 
     private struct Group {
         let name: String
-        var hotspots: [Hotspot]
+        var entries: [TreemapEntry]
         var value: Double
     }
 
-    private static func group(_ hotspots: [Hotspot]) -> [Group] {
+    private static func group(_ entries: [TreemapEntry]) -> [Group] {
         var groups: [String: Group] = [:]
-        for hotspot in hotspots {
-            let components = hotspot.path.split(separator: "/")
+        for entry in entries {
+            let components = entry.path.split(separator: "/")
             let name = components.count > 1 ? String(components[0]) : "/"
-            groups[name, default: Group(name: name, hotspots: [], value: 0)].hotspots.append(hotspot)
-            groups[name]!.value += area(of: hotspot)
+            groups[name, default: Group(name: name, entries: [], value: 0)].entries.append(entry)
+            groups[name]!.value += area(of: entry)
         }
 
         let sorted = groups.values.sorted { ($0.value, $1.name) > ($1.value, $0.name) }
@@ -111,7 +142,7 @@ public enum TreemapLayout {
         let folded = sorted.dropFirst(maximumGroups - 1)
         let other = Group(
             name: otherGroupName,
-            hotspots: folded.flatMap(\.hotspots),
+            entries: folded.flatMap(\.entries),
             value: folded.reduce(0) { $0 + $1.value }
         )
         return kept + [other]
