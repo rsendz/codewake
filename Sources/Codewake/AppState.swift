@@ -29,15 +29,20 @@ final class AppState {
 
     enum ViewMode: String, CaseIterable, Identifiable {
         case map = "Map"
+        case ownership = "Ownership"
         case branches = "Branches"
         var id: String { rawValue }
 
         var symbol: String {
             switch self {
             case .map: "square.grid.2x2"
+            case .ownership: "person.2"
             case .branches: "arrow.triangle.branch"
             }
         }
+
+        /// Modes drawn over the file map, which share its statistics and its selection.
+        var showsFiles: Bool { self != .branches }
     }
 
     private(set) var phase: Phase = .welcome
@@ -45,6 +50,8 @@ final class AppState {
     private(set) var hotspots: [Hotspot] = []
     private(set) var statistics: SnapshotStatistics?
     private(set) var isRefining = false
+    private(set) var isComputingOwnership = false
+    private(set) var ownership: OwnershipReport?
     private(set) var repositoryURL: URL?
 
     var commitIndex: Int = 0
@@ -52,8 +59,12 @@ final class AppState {
     private(set) var detail: FileDetail?
     private(set) var isPlaying = false
 
-    var viewMode: ViewMode = .map
+    var viewMode: ViewMode = .map {
+        didSet { refreshOwnership() }
+    }
     var selectedBranch: Branch.ID?
+    /// When set, the ownership map dims everything this author does not own.
+    var highlightedAuthor: String?
     var searchText: String = ""
     var isShowingHelp = false
     /// Bumped to ask the search field to take focus. A plain Bool would not re-fire when
@@ -65,6 +76,7 @@ final class AppState {
     private var engine: AnalysisEngine?
     private var refineTask: Task<Void, Never>?
     private var detailTask: Task<Void, Never>?
+    private var ownershipTask: Task<Void, Never>?
     private var playbackTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
 
@@ -100,6 +112,8 @@ final class AppState {
                 self.selectedBranch = nil
                 self.searchText = ""
                 self.detail = nil
+                self.ownership = nil
+                self.highlightedAuthor = nil
                 self.phase = .ready
                 self.rememberRecent(url)
                 self.scrub(to: self.commitIndex, refine: true)
@@ -133,6 +147,7 @@ final class AppState {
         loadTask?.cancel()
         stopPlayback()
         refineTask?.cancel()
+        ownershipTask?.cancel()
         engine = nil
         summary = nil
         repositoryURL = nil
@@ -141,6 +156,8 @@ final class AppState {
         selection = nil
         selectedBranch = nil
         detail = nil
+        ownership = nil
+        highlightedAuthor = nil
         searchText = ""
         phase = .welcome
     }
@@ -194,6 +211,30 @@ final class AppState {
         hotspots = result.hotspots
         statistics = result.statistics
         refreshDetail()
+        refreshOwnership()
+    }
+
+    /// Ownership walks every live file rather than the top few hundred, so it waits for
+    /// the playhead to settle the same way complexity does, and is only computed at all
+    /// while its view is on screen.
+    private func refreshOwnership() {
+        ownershipTask?.cancel()
+        guard let engine, viewMode == .ownership else {
+            isComputingOwnership = false
+            return
+        }
+        let index = commitIndex
+        isComputingOwnership = true
+
+        ownershipTask = Task {
+            defer { isComputingOwnership = false }
+            try? await Task.sleep(for: refineDelay)
+            guard !Task.isCancelled else { return }
+
+            let report = await engine.ownership(at: index)
+            guard !Task.isCancelled, index == self.commitIndex else { return }
+            self.ownership = report
+        }
     }
 
     func step(by delta: Int) {
@@ -304,6 +345,17 @@ final class AppState {
     var currentCommit: CommitSummary? {
         guard let summary, summary.commits.indices.contains(commitIndex) else { return nil }
         return summary.commits[commitIndex]
+    }
+
+    /// Escape peels one layer of state off at a time, outermost first.
+    func clearFocus() {
+        if !searchText.isEmpty {
+            searchText = ""
+        } else if highlightedAuthor != nil {
+            highlightedAuthor = nil
+        } else {
+            select(nil)
+        }
     }
 
     var isReady: Bool {

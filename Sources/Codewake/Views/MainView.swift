@@ -90,6 +90,27 @@ struct MainView: View {
                         onReveal: { state.revealSelectionInFinder() },
                         onCopyPath: { state.copySelectionPath() }
                     )
+                case .ownership:
+                    let report = state.ownership ?? .empty
+                    let colors = AuthorColors(report)
+                    VStack(spacing: 0) {
+                        OwnershipView(
+                            report: report,
+                            colors: colors,
+                            isLoading: state.ownership == nil,
+                            selection: state.selection,
+                            highlightedAuthor: state.highlightedAuthor,
+                            onSelect: { state.select($0) }
+                        )
+                        ownershipFooter(report)
+                    }
+                    OwnershipDetailView(
+                        report: report,
+                        colors: colors,
+                        detail: state.detail,
+                        highlightedAuthor: state.highlightedAuthor,
+                        onHighlight: { state.highlightedAuthor = $0 }
+                    )
                 case .branches:
                     BranchesView(
                         branches: state.summary?.branches ?? [],
@@ -124,11 +145,7 @@ struct MainView: View {
         .onKeyPress(.rightArrow) { state.step(by: 1); return .handled }
         .onKeyPress(.space) { state.togglePlayback(); return .handled }
         .onKeyPress(.escape) {
-            if !state.searchText.isEmpty {
-                state.searchText = ""
-            } else {
-                state.select(nil)
-            }
+            state.clearFocus()
             return .handled
         }
     }
@@ -148,7 +165,7 @@ struct MainView: View {
             .labelsHidden()
             .fixedSize()
 
-            if state.viewMode == .map, let statistics = state.statistics {
+            if state.viewMode.showsFiles, let statistics = state.statistics {
                 stat("\(statistics.fileCount.formatted())", "files")
                 stat("\(statistics.totalLines.formatted())", "lines")
             }
@@ -158,7 +175,7 @@ struct MainView: View {
 
             Spacer()
 
-            if state.isRefining {
+            if state.isRefining || state.isComputingOwnership {
                 ProgressView()
                     .controlSize(.mini)
                     .help("Measuring complexity")
@@ -210,6 +227,45 @@ struct MainView: View {
             return .handled
         }
         .onChange(of: state.focusSearchToken) { isSearchFocused = true }
+    }
+
+    /// What a colour means on the ownership map, in the same place the heat scale sits on
+    /// the hotspot map.
+    private func ownershipFooter(_ report: OwnershipReport) -> some View {
+        HStack(spacing: 14) {
+            HStack(spacing: 5) {
+                ForEach(Array(report.authors.prefix(Palette.authorSlotCount).enumerated()), id: \.offset) { index, _ in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Palette.author(index))
+                        .frame(width: 9, height: 9)
+                }
+                Text("colour is the author with the most commits to a file")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.faintText)
+                    .padding(.leading, 2)
+            }
+
+            HStack(spacing: 5) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Palette.author(nil, strength: 0))
+                    .frame(width: 9, height: 9)
+                Text("no clear owner")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.faintText)
+            }
+
+            Spacer()
+
+            if report.files.count > OwnershipView.tileLimit {
+                Text("showing the \(OwnershipView.tileLimit) largest of \(report.totalFiles.formatted()) files")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.faintText)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(Palette.canvas)
+        .overlay(alignment: .top) { Rectangle().fill(Palette.hairline).frame(height: 1) }
     }
 
     /// The colour scale, always on screen. The map is unreadable without knowing which end
