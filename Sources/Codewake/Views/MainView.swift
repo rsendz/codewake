@@ -111,19 +111,6 @@ struct MainView: View {
                         highlightedAuthor: state.highlightedAuthor,
                         onHighlight: { state.highlightedAuthor = $0 }
                     )
-                case .branches:
-                    BranchesView(
-                        branches: state.summary?.branches ?? [],
-                        dateRange: state.summary?.dateRange ?? Date()...Date(),
-                        selection: state.selectedBranch,
-                        playheadDate: state.currentCommit?.date,
-                        onSelect: { state.select(branch: $0) }
-                    )
-                    BranchDetailView(
-                        branch: state.branch,
-                        totalBranches: state.summary?.branches.count ?? 0,
-                        mergeCount: state.summary?.mergeCount ?? 0
-                    )
                 }
             }
 
@@ -165,7 +152,7 @@ struct MainView: View {
             .labelsHidden()
             .fixedSize()
 
-            if state.viewMode.showsFiles, let statistics = state.statistics {
+            if let statistics = state.statistics {
                 stat("\(statistics.fileCount.formatted())", "files")
                 stat("\(statistics.totalLines.formatted())", "lines")
             }
