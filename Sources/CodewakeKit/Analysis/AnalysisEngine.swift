@@ -25,9 +25,6 @@ public struct RepositorySummary: Sendable {
     public let name: String
     public let commits: [CommitSummary]
     public let fileCount: Int
-    /// Merged branches, oldest merge first.
-    public let branches: [Branch]
-    public let mergeCount: Int
 
     public var commitCount: Int { commits.count }
     public var dateRange: ClosedRange<Date> { commits[0].date...commits[commits.count - 1].date }
@@ -61,7 +58,6 @@ public struct FileDetail: Sendable {
 public enum LoadPhase: Sendable {
     case readingHistory
     case buildingTimelines
-    case readingBranches
     case ready
 }
 
@@ -107,18 +103,11 @@ public actor AnalysisEngine {
         progress(.buildingTimelines)
         let history = RepositoryHistory(name: provider.name, commits: commits, filter: filter)
 
-        var churnBySHA: [String: (churn: Int, files: Int)] = [:]
-        var timelineIndexBySHA: [String: Int] = [:]
-        churnBySHA.reserveCapacity(commits.count)
-        timelineIndexBySHA.reserveCapacity(commits.count)
-
         let summaries = commits.enumerated().map { index, commit -> CommitSummary in
             // Counted after filtering, so the timeline's activity graph shows the shape of
             // the work rather than a spike everywhere a lock file was regenerated.
             let counted = commit.changes.filter { filter.includes($0.path) }
             let churn = counted.reduce(0) { $0 + $1.churn }
-            churnBySHA[commit.sha] = (churn, counted.count)
-            timelineIndexBySHA[commit.sha] = index
             return CommitSummary(
                 index: index,
                 sha: commit.sha,
@@ -130,20 +119,10 @@ public actor AnalysisEngine {
             )
         }
 
-        progress(.readingBranches)
-        // A repository with no merges simply has no branches to show, and a graph that
-        // cannot be read should not stop the rest of the app from working.
-        let graph = (try? await provider.loadGraph()) ?? []
-        let branches = BranchExtractor.branches(
-            from: graph, churnBySHA: churnBySHA, timelineIndexBySHA: timelineIndexBySHA
-        )
-
         let summary = RepositorySummary(
             name: history.name,
             commits: summaries,
-            fileCount: history.files.count,
-            branches: branches,
-            mergeCount: graph.count { $0.isMerge }
+            fileCount: history.files.count
         )
 
         progress(.ready)

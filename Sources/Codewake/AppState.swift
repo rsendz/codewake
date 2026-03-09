@@ -30,19 +30,14 @@ final class AppState {
     enum ViewMode: String, CaseIterable, Identifiable {
         case map = "Map"
         case ownership = "Ownership"
-        case branches = "Branches"
         var id: String { rawValue }
 
         var symbol: String {
             switch self {
             case .map: "square.grid.2x2"
             case .ownership: "person.2"
-            case .branches: "arrow.triangle.branch"
             }
         }
-
-        /// Modes drawn over the file map, which share its statistics and its selection.
-        var showsFiles: Bool { self != .branches }
     }
 
     private(set) var phase: Phase = .welcome
@@ -62,7 +57,6 @@ final class AppState {
     var viewMode: ViewMode = .map {
         didSet { refreshOwnership() }
     }
-    var selectedBranch: Branch.ID?
     /// When set, the ownership map dims everything this author does not own.
     var highlightedAuthor: String?
     var searchText: String = ""
@@ -109,7 +103,6 @@ final class AppState {
                 self.repositoryURL = url
                 self.commitIndex = engine.summary.commitCount - 1
                 self.selection = nil
-                self.selectedBranch = nil
                 self.searchText = ""
                 self.detail = nil
                 self.ownership = nil
@@ -154,7 +147,6 @@ final class AppState {
         hotspots = []
         statistics = nil
         selection = nil
-        selectedBranch = nil
         detail = nil
         ownership = nil
         highlightedAuthor = nil
@@ -166,7 +158,6 @@ final class AppState {
         switch loadPhase {
         case .readingHistory: phase = .loading("Reading history…")
         case .buildingTimelines: phase = .loading("Building timelines…")
-        case .readingBranches: phase = .loading("Reading branches…")
         case .ready: break
         }
     }
@@ -307,14 +298,6 @@ final class AppState {
         refreshDetail()
     }
 
-    func select(branch id: Branch.ID?) {
-        selectedBranch = id
-        guard let id, let branch = summary?.branches.first(where: { $0.id == id }) else { return }
-        // Move the playhead to the moment the branch's work had all landed, so switching
-        // back to the map shows the codebase as that branch left it.
-        scrub(to: branch.timelineIndex)
-    }
-
     private func refreshDetail() {
         detailTask?.cancel()
         guard let engine, let id = selection else {
@@ -361,11 +344,6 @@ final class AppState {
     var isReady: Bool {
         if case .ready = phase { return true }
         return false
-    }
-
-    var branch: Branch? {
-        guard let id = selectedBranch else { return nil }
-        return summary?.branches.first { $0.id == id }
     }
 
     /// Partner files of the current selection, by how tightly they are coupled to it.

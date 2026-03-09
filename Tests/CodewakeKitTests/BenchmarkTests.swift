@@ -89,12 +89,6 @@ struct BenchmarkTests {
         print("scrub: \(perStep.formatted(.number.precision(.fractionLength(2))))ms per step")
         #expect(perStep < 16, "scrubbing must keep up with a 60fps drag")
 
-        let branches = loaded.summary.branches
-        print("branches: \(branches.count) merged, \(loaded.summary.mergeCount) merge commits")
-        for branch in branches.sorted(by: { $0.churn > $1.churn }).prefix(5) {
-            print("  \(branch.name) — \(branch.commitCount) commits, \(branch.churn) churn, \(branch.days)d")
-        }
-
         // Ownership walks every live file rather than the top few hundred, so it is the
         // one query whose cost scales with the size of the repository rather than with the
         // size of the view. It runs once when the playhead settles.

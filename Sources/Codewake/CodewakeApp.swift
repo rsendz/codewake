@@ -79,8 +79,6 @@ struct CodewakeApp: App {
                     .keyboardShortcut("1", modifiers: .command)
                 Button("Show Ownership") { state.viewMode = .ownership }
                     .keyboardShortcut("2", modifiers: .command)
-                Button("Show Branches") { state.viewMode = .branches }
-                    .keyboardShortcut("3", modifiers: .command)
                 Divider()
                 Button("Close Repository") { state.closeRepository() }
                     .keyboardShortcut("w", modifiers: [.command, .shift])

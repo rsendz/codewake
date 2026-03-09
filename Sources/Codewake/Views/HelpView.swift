@@ -90,10 +90,6 @@ struct HelpView: View {
                     "Bus factor",
                     "How few people it would take to lose half of this codebase's owners. A bus factor of one means a single person is the main author of half the code. It is a rough count, not a prediction — but a low one is worth knowing about before it becomes urgent."
                 )
-                Term(
-                    "Branch",
-                    "A line of work developed away from the main line and merged back. The Branches view reconstructs them from merge commits: when each one started, how long it ran, and how much it changed."
-                )
             }
         }
     }
@@ -120,7 +116,7 @@ struct HelpView: View {
                 Shortcut("Space", "Play or pause")
                 Shortcut("⌘ ⌥ ←  /  ⌘ ⌥ →", "Jump to the first or last commit")
                 Shortcut("⌘F", "Search files — matches stay lit, the rest dim")
-                Shortcut("⌘1  ⌘2  ⌘3", "Map, ownership, branches")
+                Shortcut("⌘1  ⌘2", "Map, ownership")
                 Shortcut("Esc", "Clear the search, the author, then the selection")
                 Shortcut("⌘O", "Open another repository")
             }
