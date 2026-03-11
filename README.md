@@ -66,7 +66,7 @@ term the interface uses.
 | `←` `→` | Step one commit |
 | `Space` / `⌘P` | Play or pause |
 | `⌘⌥←` `⌘⌥→` | Jump to the first or last commit |
-| `⌘1` `⌘2` `⌘3` | Switch between the map, ownership, and branches |
+| `⌘1` `⌘2` | Switch between the map and ownership |
 | `⌘F` | Filter files — matches stay lit, everything else dims |
 | `Esc` | Clear the search, then the author, then the selection |
 
@@ -84,10 +84,6 @@ to lose half of it.
 
 ![The ownership map, coloured by who owns each file](docs/ownership.png)
 
-**The branches view** — every merged branch as a bar from its first commit to the day it
-landed, coloured by how much code it moved. Selecting one moves the playhead to where its
-work arrived.
-
 **The inspector** — for the selected file at the selected moment: its size, its churn, its
 nesting depth, who has touched it, what it changes with, and how its churn was distributed
 over time.
@@ -96,7 +92,7 @@ over time.
 
 ```
 git log ──▶ parse ──▶ file timelines ──▶ snapshot engine ──▶ hotspots ──▶ map
-        └─▶ graph ──▶ branch extraction        │           └─▶ coupling ──▶ outlines
+                                               │           └─▶ coupling ──▶ outlines
                                                ▲
                                           scrub position
 ```
@@ -128,13 +124,6 @@ that costs a pass over one file's history, so coupling is answered on demand for
 was just clicked. Commits touching more than 25 files are ignored — a mass rename couples
 everything to everything and means nothing.
 
-**Branches are reconstructed from the graph, not from ref names.** Topic branches are
-usually deleted after merging, so their names survive only in the message git wrote. The
-first-parent chain from HEAD is the trunk; commits reachable from a merge's other parents
-but not from the trunk are exactly the work that happened on a branch. One extra `git log`
-pass, no `rev-list` per merge. On a real 566-merge repository this recovers 277 branches
-with their names, durations, authors, and sizes.
-
 **Ownership is counted in commits, not surviving lines.** `git blame` answers "whose lines
 are these right now", which is the fragile version of the question: one reformat or one
 rename rewrites every line's author without moving any knowledge. Who keeps coming back to
@@ -157,7 +146,7 @@ the second is git's own history, at 60,896 non-merge commits (82,154 including m
 
 | Operation | 1,836 commits | 60,896 commits |
 | --- | --- | --- |
-| Load, index, and extract branches | 0.83s | 25s |
+| Load and index | 0.83s | 25s |
 | Scrub step (cached) | 0.05ms | 0.17ms |
 | Repository-wide ownership | 1ms | 16ms |
 | Treemap layout, 250 tiles | 0.34ms | 0.16ms |
@@ -182,19 +171,19 @@ Reproduce with `CODEWAKE_BENCH_REPO=~/some/repo swift test -c release --filter B
 swift test
 ```
 
-70 tests covering the log parser against real git output (renames, binary files,
+60 tests covering the log parser against real git output (renames, binary files,
 deletions, awkward commit subjects), the snapshot engine's forward/backward equivalence,
-coupling thresholds, ownership and bus factor as the playhead moves, branch extraction
-including back-merges and double-counting, complexity scoring, treemap geometry, and an
-end-to-end pass over a repository the test builds itself.
+coupling thresholds, ownership and bus factor as the playhead moves, complexity
+scoring, treemap geometry, and an end-to-end pass over a repository the test builds
+itself.
 
 GitHub Actions runs the same tests on every push, then builds and signs `Codewake.app` and
 attaches it to any tagged release.
 
 ## Limitations
 
-Complexity is a proxy, not a parse. Only the current branch's history is read, so branches
-that were never merged do not appear. Merge commits are skipped when counting churn, so
+Complexity is a proxy, not a parse. Only the current branch's history is read, so work
+that never landed on it does not appear. Merge commits are skipped when counting churn, so
 work is not counted twice. Authors are identified by the name on the commit, so one person
 committing under two names counts as two people. There is no architecture or dependency
 view.
