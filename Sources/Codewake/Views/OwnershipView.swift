@@ -8,18 +8,22 @@
 import CodewakeKit
 import SwiftUI
 
-/// Assigns a legend colour to each author. The top few get a hue of their own; everyone
+/// Assigns a legend colour to each author. The busiest few get a hue of their own; everyone
 /// after that shares one neutral slate, because a map with forty colours on it is a map
 /// with no colours on it.
+///
+/// Built once per repository from `RepositorySummary.authorRanking`, never from the report
+/// at the current position. The report ranks people by what they own *here*, and that order
+/// changes as the playhead moves — colouring from it made files change colour mid-scrub for
+/// reasons unrelated to ownership.
 struct AuthorColors {
     private let slots: [String: Int]
+    let slotCount: Int
 
-    init(_ report: OwnershipReport) {
+    init(ranking: [String]) {
+        slotCount = Palette.authorSlotCount(forAuthors: ranking.count)
         slots = Dictionary(
-            uniqueKeysWithValues: report.authors
-                .prefix(Palette.authorSlotCount)
-                .enumerated()
-                .map { ($0.element.name, $0.offset) }
+            uniqueKeysWithValues: ranking.prefix(slotCount).enumerated().map { ($0.element, $0.offset) }
         )
     }
 
@@ -27,8 +31,10 @@ struct AuthorColors {
     func slot(for name: String) -> Int? { slots[name] }
 
     func color(for name: String, strength: Double = 1) -> Color {
-        Palette.author(slots[name], strength: strength)
+        Palette.author(slots[name], of: slotCount, strength: strength)
     }
+
+    func color(slot: Int) -> Color { Palette.author(slot, of: slotCount) }
 }
 
 /// The ownership map: the same rectangles as the hotspot map, coloured by who owns each
@@ -78,12 +84,17 @@ struct OwnershipView: View {
 
     /// How strongly a file reads as belonging to its owner.
     ///
-    /// Not the raw share: on a team of five, holding 40% of a file's commits is a real
-    /// claim, and fading everything under half to grey painted almost the whole map as
-    /// unowned. The scale starts just below an even two-way split and saturates at 85%,
-    /// which leaves the neutral colour for files that genuinely belong to a committee.
+    /// Not the raw share, and not a fixed threshold either. An even split between everyone
+    /// who touched the file is `1 / authorCount`, and that is the point where nobody owns
+    /// it — on a two-person file 30% is nothing, on a twenty-person file it is dominance.
+    /// So the scale starts just above an even split and saturates most of the way to sole
+    /// authorship, which means "owns it" reads the same on a pair as on a large team.
     private func strength(_ file: FileOwnership) -> Double {
-        min(max((file.share - 0.3) / 0.55, 0), 1)
+        let even = 1 / Double(max(file.authorCount, 1))
+        let floor = even * 1.15
+        let ceiling = even + (1 - even) * 0.75
+        guard ceiling > floor else { return 1 }
+        return min(max((file.share - floor) / (ceiling - floor), 0), 1)
     }
 
     private func appearance(for file: FileOwnership?, isHovered: Bool) -> TileAppearance {
