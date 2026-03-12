@@ -25,6 +25,13 @@ public struct RepositorySummary: Sendable {
     public let name: String
     public let commits: [CommitSummary]
     public let fileCount: Int
+    /// Everyone who ever committed, busiest first, fixed for the life of the repository.
+    ///
+    /// The ownership map colours people by their position in this list. Ranking them by
+    /// what they own *at the current position* would look more relevant and be much worse:
+    /// that order changes as the playhead moves, so files would change colour while
+    /// scrubbing for reasons that have nothing to do with who owns them.
+    public let authorRanking: [String]
 
     public var commitCount: Int { commits.count }
     public var dateRange: ClosedRange<Date> { commits[0].date...commits[commits.count - 1].date }
@@ -119,10 +126,18 @@ public actor AnalysisEngine {
             )
         }
 
+        var commitsByAuthor: [String: Int] = [:]
+        for commit in commits { commitsByAuthor[commit.authorName, default: 0] += 1 }
+        // Ties break on name so two runs over the same history assign the same colours.
+        let ranking = commitsByAuthor
+            .sorted { ($0.value, $1.key) > ($1.value, $0.key) }
+            .map(\.key)
+
         let summary = RepositorySummary(
             name: history.name,
             commits: summaries,
-            fileCount: history.files.count
+            fileCount: history.files.count,
+            authorRanking: ranking
         )
 
         progress(.ready)

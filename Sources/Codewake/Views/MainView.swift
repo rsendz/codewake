@@ -92,7 +92,7 @@ struct MainView: View {
                     )
                 case .ownership:
                     let report = state.ownership ?? .empty
-                    let colors = AuthorColors(report)
+                    let colors = state.authorColors
                     VStack(spacing: 0) {
                         OwnershipView(
                             report: report,
@@ -221,9 +221,9 @@ struct MainView: View {
     private func ownershipFooter(_ report: OwnershipReport) -> some View {
         HStack(spacing: 14) {
             HStack(spacing: 5) {
-                ForEach(Array(report.authors.prefix(Palette.authorSlotCount).enumerated()), id: \.offset) { index, _ in
+                ForEach(0..<state.authorColors.slotCount, id: \.self) { slot in
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Palette.author(index))
+                        .fill(state.authorColors.color(slot: slot))
                         .frame(width: 9, height: 9)
                 }
                 Text("colour is the author with the most commits to a file")

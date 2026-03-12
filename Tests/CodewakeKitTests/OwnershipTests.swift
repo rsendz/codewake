@@ -154,4 +154,32 @@ struct OwnershipTests {
         let solo = try file("src/solo.swift", in: report)
         #expect(report.ownership(of: solo.id) == solo)
     }
+
+    /// The ownership map colours people by their place in this list. It has to be fixed for
+    /// the whole repository: ranking by what someone owns at the current position looks
+    /// more relevant but changes as the playhead moves, which made files change colour
+    /// mid-scrub for reasons that had nothing to do with who owned them.
+    @Test("The author ranking is fixed for the repository, not per position")
+    func authorRankingIsStable() async throws {
+        let engine = try await AnalysisEngine.load(from: StubHistoryProvider(commits: history.commits))
+        // Ada has the most commits over all of history, then Grace, then Linus.
+        #expect(engine.summary.authorRanking == ["Ada", "Grace", "Linus"])
+
+        // Early on, Grace owns more lines than Ada does — the per-position report says so,
+        // and the ranking must not follow it.
+        var snapshots = SnapshotEngine(history: history)
+        snapshots.move(to: 1)
+        let early = snapshots.ownership()
+        #expect(early.authors.map(\.name) != engine.summary.authorRanking)
+    }
+}
+
+/// Serves a fixed list of commits, so tests can exercise `AnalysisEngine.load` without
+/// building a git repository on disk.
+private struct StubHistoryProvider: HistoryProvider {
+    let commits: [Commit]
+    var name: String { "stub" }
+
+    func loadCommits() async throws -> [Commit] { commits }
+    func loadBlobs(shas: [String]) async throws -> [String: String] { [:] }
 }

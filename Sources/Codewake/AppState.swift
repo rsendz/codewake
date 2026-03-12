@@ -47,6 +47,9 @@ final class AppState {
     private(set) var isRefining = false
     private(set) var isComputingOwnership = false
     private(set) var ownership: OwnershipReport?
+    /// Author-to-colour assignment, fixed for the life of the loaded repository so a person
+    /// keeps their colour however far the playhead moves.
+    private(set) var authorColors = AuthorColors(ranking: [])
     private(set) var repositoryURL: URL?
 
     var commitIndex: Int = 0
@@ -55,7 +58,7 @@ final class AppState {
     private(set) var isPlaying = false
 
     var viewMode: ViewMode = .map {
-        didSet { refreshOwnership() }
+        didSet { refreshDerivedView() }
     }
     /// When set, the ownership map dims everything this author does not own.
     var highlightedAuthor: String?
@@ -70,12 +73,19 @@ final class AppState {
     private var engine: AnalysisEngine?
     private var refineTask: Task<Void, Never>?
     private var detailTask: Task<Void, Never>?
-    private var ownershipTask: Task<Void, Never>?
+    private var derivedTask: Task<Void, Never>?
+    /// Only the newest derived-view task may clear `isComputingOwnership`. Cancelling a
+    /// task does not run its `defer` synchronously — it fires whenever that task next gets
+    /// scheduled, which is after the replacement has already set the flag.
+    private var derivedGeneration = 0
     private var playbackTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
 
     /// How long the playhead must sit still before spending git reads on exact complexity.
     private let refineDelay = Duration.milliseconds(180)
+    /// The equivalent wait for views computed from history already in memory. Much shorter,
+    /// because there is no git read to avoid — just enough to coalesce a fast drag.
+    private let derivedDelay = Duration.milliseconds(30)
 
     // MARK: - Repository lifecycle
 
@@ -100,6 +110,7 @@ final class AppState {
 
                 self.engine = engine
                 self.summary = engine.summary
+                self.authorColors = AuthorColors(ranking: engine.summary.authorRanking)
                 self.repositoryURL = url
                 self.commitIndex = engine.summary.commitCount - 1
                 self.selection = nil
@@ -140,9 +151,10 @@ final class AppState {
         loadTask?.cancel()
         stopPlayback()
         refineTask?.cancel()
-        ownershipTask?.cancel()
+        derivedTask?.cancel()
         engine = nil
         summary = nil
+        authorColors = AuthorColors(ranking: [])
         repositoryURL = nil
         hotspots = []
         statistics = nil
@@ -202,14 +214,23 @@ final class AppState {
         hotspots = result.hotspots
         statistics = result.statistics
         refreshDetail()
-        refreshOwnership()
+        refreshDerivedView()
     }
 
-    /// Ownership walks every live file rather than the top few hundred, so it waits for
-    /// the playhead to settle the same way complexity does, and is only computed at all
-    /// while its view is on screen.
-    private func refreshOwnership() {
-        ownershipTask?.cancel()
+    /// Recomputes whichever view is on screen and is derived from the whole snapshot rather
+    /// than from the top few hundred files.
+    ///
+    /// These walk every live file, so they are not free the way the hotspot map is — but
+    /// they are cheap enough to keep up: ownership costs 1ms on a small repository and 16ms
+    /// on git's own history. They were previously debounced by the same 180ms the
+    /// complexity path uses, which is there to avoid *git reads*; nothing here touches git.
+    /// Playback steps every 50ms, so that debounce meant the pending recompute was always
+    /// cancelled before it fired and these views simply froze while the timeline played.
+    private func refreshDerivedView() {
+        derivedTask?.cancel()
+        derivedGeneration += 1
+        let generation = derivedGeneration
+
         guard let engine, viewMode == .ownership else {
             isComputingOwnership = false
             return
@@ -217,10 +238,14 @@ final class AppState {
         let index = commitIndex
         isComputingOwnership = true
 
-        ownershipTask = Task {
-            defer { isComputingOwnership = false }
-            try? await Task.sleep(for: refineDelay)
-            guard !Task.isCancelled else { return }
+        derivedTask = Task {
+            defer { if generation == self.derivedGeneration { isComputingOwnership = false } }
+            // Playback is already rate-limited to 20 steps a second, so waiting again just
+            // means never arriving.
+            if !isPlaying {
+                try? await Task.sleep(for: derivedDelay)
+                guard !Task.isCancelled else { return }
+            }
 
             let report = await engine.ownership(at: index)
             guard !Task.isCancelled, index == self.commitIndex else { return }
