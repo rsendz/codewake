@@ -100,7 +100,7 @@ struct HelpView: View {
                 Bullet("Each rectangle is a file. **Bigger means longer** — more lines of code.")
                 Bullet("**Colour is the hotspot score.** Cool blue is calm; orange and red are files that are both large or tangled and frequently changed.")
                 Bullet("Files are **grouped by top-level folder**, so the shape stays recognisable as you scrub.")
-                Bullet("Colour is relative to the hottest file currently on screen, so early history still has contrast to read rather than being uniformly cold.")
+                Bullet("Colour is **relative to the files on screen now**, and mostly to their ranking rather than their raw scores — so roughly the same share of any repository reads as hot, and early history still has contrast to read rather than being uniformly cold.")
 
                 LegendStrip()
                     .padding(.top, 4)

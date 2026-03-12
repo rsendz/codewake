@@ -20,31 +20,17 @@ struct TreemapView: View {
     let searchMatches: Set<FileID>?
     let onSelect: (FileID?) -> Void
 
-    /// Colour is relative to the hottest file currently on screen. An absolute scale would
-    /// leave early history — when nothing has accumulated much churn yet — a uniform slab
-    /// of cold blue with no shape to read.
-    private var peakScore: Double {
-        max(hotspots.first?.score ?? 0, 0.0001)
-    }
-
-    /// Both inputs to the score are log-normalised, which is what keeps one outlier from
-    /// flattening the ranking — but it also means a file with a fraction of the peak's
-    /// churn still scores past the middle. Colouring straight off that leaves most of the
-    /// map warm and says nothing. This curve pushes the mass back down so only files near
-    /// the top of the range read as hot, which is the whole point of the view.
-    private func heat(_ score: Double) -> Double {
-        pow(score / peakScore, 2.2)
-    }
-
     var body: some View {
         let index = Dictionary(hotspots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        // Built once per pass, not once per tile: it ranks the whole array.
+        let scale = HeatScale(hotspots)
 
         TreemapCanvas(
             entries: hotspots.map {
                 TreemapEntry(id: $0.id, path: $0.path, area: Double($0.file.approximateLines))
             },
             appearance: { tile, isHovered in
-                appearance(for: index[tile.id], isHovered: isHovered)
+                appearance(for: index[tile.id], scale: scale, isHovered: isHovered)
             },
             onSelect: onSelect,
             tooltip: { tile in
@@ -56,9 +42,9 @@ struct TreemapView: View {
         }
     }
 
-    private func appearance(for hotspot: Hotspot?, isHovered: Bool) -> TileAppearance {
+    private func appearance(for hotspot: Hotspot?, scale: HeatScale, isHovered: Bool) -> TileAppearance {
         guard let hotspot else { return TileAppearance(fill: .clear) }
-        let relative = heat(hotspot.score)
+        let relative = scale.heat(of: hotspot.id)
         let isSelected = hotspot.id == selection
 
         // A search dims everything it does not match, rather than hiding it: the map's
@@ -103,5 +89,50 @@ struct TreemapView: View {
                     .foregroundStyle(Palette.coupling)
             }
         }
+    }
+}
+
+/// Turns hotspot scores into positions on the colour ramp.
+///
+/// Dividing by the hottest file on screen — the obvious thing, and what this used to do —
+/// ties the whole map to a single order statistic. On a large repository one runaway file
+/// sets the peak and everything else collapses into the cold end; on a small one there is
+/// no runaway file, so the same divisor leaves the map washed out. Either way the amount of
+/// the map that reads as hot depends on the repository rather than on the code.
+///
+/// So rank carries most of the weight: a file's position among the files on screen, curved
+/// so that being near the top is what earns a warm colour rather than being merely above
+/// the middle. That fixes the proportions at any size. The peak-relative score keeps a
+/// minority share, because rank alone would flatten a genuine outlier into "first" and
+/// invent separation between files that actually score the same.
+struct HeatScale {
+    /// Rank in the on-screen ordering, 1 for the hottest file, 0 for the coldest.
+    private let ranks: [FileID: Double]
+    private let scores: [FileID: Double]
+    private let peak: Double
+
+    /// How sharply rank has to approach the top to read as hot. At 2.5 roughly the top
+    /// twentieth of files are red and the top fifth are warm, whatever the repository.
+    private static let rankCurve = 2.5
+    private static let rankWeight = 0.6
+
+    /// `hotspots` arrives sorted hottest first, which is the ranking.
+    init(_ hotspots: [Hotspot]) {
+        peak = max(hotspots.first?.score ?? 0, 0.0001)
+        let last = Double(max(hotspots.count - 1, 1))
+        ranks = Dictionary(
+            hotspots.enumerated().map { ($0.element.id, 1 - Double($0.offset) / last) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        scores = Dictionary(
+            hotspots.map { ($0.id, $0.score) }, uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    func heat(of id: FileID) -> Double {
+        guard let rank = ranks[id], let score = scores[id] else { return 0 }
+        let byRank = pow(rank, Self.rankCurve)
+        let byScore = pow(score / peak, 2.2)
+        return byRank * Self.rankWeight + byScore * (1 - Self.rankWeight)
     }
 }
