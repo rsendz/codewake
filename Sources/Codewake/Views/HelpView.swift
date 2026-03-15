@@ -100,6 +100,9 @@ struct HelpView: View {
                 Bullet("Each rectangle is a file. **Bigger means longer** — more lines of code.")
                 Bullet("**Colour is the hotspot score.** Cool blue is calm; orange and red are files that are both large or tangled and frequently changed.")
                 Bullet("Files are **grouped by top-level folder**, so the shape stays recognisable as you scrub.")
+                Bullet("Every file gets a rectangle, including the small ones — the smallest are lifted to a size you can see and click, which costs the largest files a fraction of a percent of their area.")
+                Bullet("**Click a folder's name to open it**, and its files get the whole canvas at a size you can read. `Esc` goes back out.")
+                Bullet("Hovering a rectangle too small to carry a name **magnifies the area around it**, so a dense corner can be read without leaving the overview.")
                 Bullet("Colour is **relative to the files on screen now**, and mostly to their ranking rather than their raw scores — so roughly the same share of any repository reads as hot, and early history still has contrast to read rather than being uniformly cold.")
 
                 LegendStrip()

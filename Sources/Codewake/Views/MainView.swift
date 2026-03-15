@@ -74,12 +74,15 @@ struct MainView: View {
                 switch state.viewMode {
                 case .map:
                     VStack(spacing: 0) {
+                        breadcrumb
                         TreemapView(
-                            hotspots: state.hotspots,
+                            hotspots: state.visibleHotspots,
                             selection: state.selection,
                             coupled: state.coupledFiles,
                             searchMatches: state.searchMatches,
-                            onSelect: { state.select($0) }
+                            depth: state.mapRoot.count,
+                            onSelect: { state.select($0) },
+                            onOpen: { state.open(directory: $0) }
                         )
                         mapFooter
                     }
@@ -94,13 +97,17 @@ struct MainView: View {
                     let report = state.ownership ?? .empty
                     let colors = state.authorColors
                     VStack(spacing: 0) {
+                        breadcrumb
                         OwnershipView(
                             report: report,
                             colors: colors,
                             isLoading: state.ownership == nil,
                             selection: state.selection,
                             highlightedAuthor: state.highlightedAuthor,
-                            onSelect: { state.select($0) }
+                            depth: state.mapRoot.count,
+                            pathPrefix: state.rootPrefix,
+                            onSelect: { state.select($0) },
+                            onOpen: { state.open(directory: $0) }
                         )
                         ownershipFooter(report)
                     }
@@ -214,6 +221,41 @@ struct MainView: View {
             return .handled
         }
         .onChange(of: state.focusSearchToken) { isSearchFocused = true }
+    }
+
+    /// Where the map is opened to, and the way back out. Only present once you have gone
+    /// in — at repository scale there is nothing to say.
+    @ViewBuilder private var breadcrumb: some View {
+        if !state.mapRoot.isEmpty {
+            HStack(spacing: 4) {
+                crumb(state.summary?.name ?? "Repository", to: 0)
+                ForEach(Array(state.mapRoot.enumerated()), id: \.offset) { index, name in
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Palette.faintText)
+                    crumb(name, to: index + 1)
+                }
+                Spacer()
+                Text("Esc to go back")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.faintText)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(Palette.canvas)
+            .overlay(alignment: .bottom) { Rectangle().fill(Palette.hairline).frame(height: 1) }
+        }
+    }
+
+    private func crumb(_ name: String, to depth: Int) -> some View {
+        let isCurrent = depth == state.mapRoot.count
+        return Button { state.closeDirectory(to: depth) } label: {
+            Text(name)
+                .font(.system(size: 11, weight: isCurrent ? .semibold : .regular))
+                .foregroundStyle(isCurrent ? Palette.primaryText : Palette.secondaryText)
+        }
+        .buttonStyle(.plain)
+        .disabled(isCurrent)
     }
 
     /// What a colour means on the ownership map, in the same place the heat scale sits on

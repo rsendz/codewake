@@ -62,6 +62,12 @@ final class AppState {
     }
     /// When set, the ownership map dims everything this author does not own.
     var highlightedAuthor: String?
+    /// Directory the map is opened into, as path components; empty is the whole repository.
+    ///
+    /// At repository scale the smallest files are a few points across — visible, but with no
+    /// room for a name. Opening a directory hands its files the whole canvas, which is the
+    /// level at which they can be read and worked with.
+    private(set) var mapRoot: [String] = []
     var searchText: String = ""
     var isShowingHelp = false
     /// Bumped to ask the search field to take focus. A plain Bool would not re-fire when
@@ -114,6 +120,7 @@ final class AppState {
                 self.repositoryURL = url
                 self.commitIndex = engine.summary.commitCount - 1
                 self.selection = nil
+                self.mapRoot = []
                 self.searchText = ""
                 self.detail = nil
                 self.ownership = nil
@@ -159,6 +166,7 @@ final class AppState {
         hotspots = []
         statistics = nil
         selection = nil
+        mapRoot = []
         detail = nil
         ownership = nil
         highlightedAuthor = nil
@@ -251,6 +259,55 @@ final class AppState {
             guard !Task.isCancelled, index == self.commitIndex else { return }
             self.ownership = report
         }
+    }
+
+    // MARK: - Opening a directory
+
+    func open(directory name: String) {
+        mapRoot.append(name)
+        // A directory with exactly one subdirectory in it and nothing else is not a level
+        // worth stopping at — opening `web` to find only `src` wastes the click and
+        // the canvas. Keep descending until there is actually a choice to make.
+        while let only = onlySubdirectory() {
+            mapRoot.append(only)
+        }
+    }
+
+    /// The single subdirectory of the current root, when it is the only thing there.
+    private func onlySubdirectory() -> String? {
+        let depth = mapRoot.count
+        var names: Set<String> = []
+        for hotspot in visibleHotspots {
+            let components = hotspot.path.split(separator: "/")
+            // A file sitting loose at this level means the level has content of its own.
+            guard components.count > depth + 1 else { return nil }
+            names.insert(String(components[depth]))
+            if names.count > 1 { return nil }
+        }
+        return names.count == 1 ? names.first : nil
+    }
+
+    /// Back to `depth` components deep; 0 is the whole repository.
+    func closeDirectory(to depth: Int) {
+        mapRoot = Array(mapRoot.prefix(depth))
+    }
+
+    /// Path prefix every visible file shares, with its trailing slash.
+    var rootPrefix: String {
+        mapRoot.isEmpty ? "" : mapRoot.joined(separator: "/") + "/"
+    }
+
+    /// The files the map is currently showing. Colour, ranking and the treemap's own scale
+    /// all work from this rather than from the whole repository, so opening a directory
+    /// re-reads its contents against each other instead of against the codebase.
+    var visibleHotspots: [Hotspot] {
+        guard !mapRoot.isEmpty else { return hotspots }
+        let prefix = rootPrefix
+        return hotspots.filter { $0.path.hasPrefix(prefix) }
+    }
+
+    func isVisible(_ path: String) -> Bool {
+        mapRoot.isEmpty || path.hasPrefix(rootPrefix)
     }
 
     func step(by delta: Int) {
@@ -361,8 +418,10 @@ final class AppState {
             searchText = ""
         } else if highlightedAuthor != nil {
             highlightedAuthor = nil
-        } else {
+        } else if selection != nil {
             select(nil)
+        } else if !mapRoot.isEmpty {
+            mapRoot.removeLast()
         }
     }
 
