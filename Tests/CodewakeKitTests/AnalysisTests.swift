@@ -203,4 +203,66 @@ struct TreemapLayoutTests {
         #expect(TreemapLayout.squarify([], in: bounds).isEmpty)
         #expect(TreemapLayout.squarify([0, 0], in: bounds).allSatisfy { $0 == .zero })
     }
+
+    // MARK: - The small end
+
+    /// Spread like a real repository: a couple of very large files, a long tail of small
+    /// ones. Sized by raw lines the tail lands under a point across and is dropped.
+    private func skewed(_ count: Int) -> [TreemapEntry] {
+        (0..<count).map { index in
+            let lines = index < 2 ? 5000 - index * 1000 : max(400 / (index + 1), 1)
+            return TreemapEntry(id: index, path: "src/file\(index).swift", area: Double(lines))
+        }
+    }
+
+    @Test("Every file gets a rectangle, however small the file is")
+    func nothingVanishes() {
+        let entries = skewed(250)
+        let canvas = CGRect(x: 0, y: 0, width: 1200, height: 820)
+        let drawn = TreemapLayout.layout(entries: entries, in: canvas).flatMap(\.tiles)
+        #expect(Set(drawn.map(\.id)) == Set(entries.map(\.id)))
+
+        // Every rectangle is big enough to see and to click, allowing for the half-point
+        // inset each tile is drawn with.
+        let smallest = drawn.map { Double($0.frame.width * $0.frame.height) }.min() ?? 0
+        #expect(smallest > TreemapLayout.minimumTileArea / 2)
+    }
+
+    /// The reason the floor is applied to the tail rather than by compressing every area:
+    /// compression would shrink the largest file too, and the largest file is the point.
+    @Test("Lifting the small end costs the largest file almost nothing")
+    func largestKeepsItsShare() {
+        let areas = skewed(250).map(\.area)
+        let total = 1200.0 * 820
+        let fitted = TreemapLayout.fittedAreas(areas, filling: total, minimum: TreemapLayout.minimumTileArea)
+
+        let untouched = areas[0] / areas.reduce(0, +) * total
+        #expect(abs(fitted[0] - untouched) / untouched < 0.02)
+        #expect(abs(fitted.reduce(0, +) - total) < 1)
+        #expect(fitted.allSatisfy { $0 >= TreemapLayout.minimumTileArea - 0.001 })
+    }
+
+    /// A map of nothing but tiny files cannot give them all the minimum — there is nobody
+    /// to take the space from — and must divide what there is rather than diverging.
+    @Test("A floor larger than the canvas allows degrades to an even split")
+    func floorCannotExceedTheMean() {
+        let fitted = TreemapLayout.fittedAreas(Array(repeating: 1.0, count: 100), filling: 1000, minimum: 500)
+        #expect(abs(fitted.reduce(0, +) - 1000) < 0.001)
+        #expect(fitted.allSatisfy { abs($0 - 10) < 0.001 })
+    }
+
+    @Test("Opening a directory groups by the next component down")
+    func depthGrouping() {
+        let entries = [
+            TreemapEntry(id: 0, path: "src/ui/View.swift", area: 100),
+            TreemapEntry(id: 1, path: "src/ui/Panel.swift", area: 80),
+            TreemapEntry(id: 2, path: "src/net/Client.swift", area: 60),
+            TreemapEntry(id: 3, path: "src/main.swift", area: 40),
+        ]
+        let groups = TreemapLayout.layout(entries: entries, in: bounds, depth: 1)
+        // "/" is where the file sitting loose in `src` goes.
+        #expect(Set(groups.map(\.id)) == ["ui", "net", "/"])
+        #expect(groups.first { $0.id == "/" }?.isOpenable == false)
+        #expect(groups.first { $0.id == "ui" }?.isOpenable == true)
+    }
 }
