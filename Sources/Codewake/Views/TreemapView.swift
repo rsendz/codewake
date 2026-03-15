@@ -18,7 +18,10 @@ struct TreemapView: View {
     let coupled: [FileID: Double]
     /// Files matching the search box, or nil when nothing is being searched.
     let searchMatches: Set<FileID>?
+    /// How far the map is opened into the directory tree.
+    let depth: Int
     let onSelect: (FileID?) -> Void
+    let onOpen: (String) -> Void
 
     var body: some View {
         let index = Dictionary(hotspots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -29,10 +32,12 @@ struct TreemapView: View {
             entries: hotspots.map {
                 TreemapEntry(id: $0.id, path: $0.path, area: Double($0.file.approximateLines))
             },
+            depth: depth,
             appearance: { tile, isHovered in
                 appearance(for: index[tile.id], scale: scale, isHovered: isHovered)
             },
             onSelect: onSelect,
+            onOpen: onOpen,
             tooltip: { tile in
                 if let hotspot = index[tile.id] { tooltip(for: hotspot) }
             }

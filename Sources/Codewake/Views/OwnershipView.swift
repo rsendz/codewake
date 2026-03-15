@@ -52,23 +52,32 @@ struct OwnershipView: View {
     let selection: FileID?
     /// When set, everything this author does not own is dimmed.
     let highlightedAuthor: String?
+    let depth: Int
+    /// Path prefix of the directory the map is opened into; empty for the whole repository.
+    let pathPrefix: String
     let onSelect: (FileID?) -> Void
+    let onOpen: (String) -> Void
 
     /// Sized by lines, so the largest files fill the map. Past this the rectangles are
     /// slivers, and the summary in the inspector still counts every file.
     static let tileLimit = 250
 
-    private var shown: ArraySlice<FileOwnership> { report.files.prefix(Self.tileLimit) }
+    private var shown: ArraySlice<FileOwnership> {
+        guard !pathPrefix.isEmpty else { return report.files.prefix(Self.tileLimit) }
+        return report.files.filter { $0.path.hasPrefix(pathPrefix) }.prefix(Self.tileLimit)
+    }
 
     var body: some View {
         let index = Dictionary(shown.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         TreemapCanvas(
             entries: shown.map { TreemapEntry(id: $0.id, path: $0.path, area: Double($0.lines)) },
+            depth: depth,
             appearance: { tile, isHovered in
                 appearance(for: index[tile.id], isHovered: isHovered)
             },
             onSelect: onSelect,
+            onOpen: onOpen,
             tooltip: { tile in
                 if let file = index[tile.id] { tooltip(for: file) }
             }
