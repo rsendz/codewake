@@ -68,13 +68,16 @@ term the interface uses.
 | `⌘⌥←` `⌘⌥→` | Jump to the first or last commit |
 | `⌘1` `⌘2` | Switch between the map and ownership |
 | `⌘F` | Filter files — matches stay lit, everything else dims |
-| `Esc` | Clear the search, then the author, then the selection |
+| Click a folder's name | Open it — its files get the whole canvas |
+| `Esc` | Clear the search, the author, the selection, then step back out |
 
 ## What it shows
 
 **The map** — every file that exists at the current moment, sized by length, coloured by
 hotspot score, grouped by top-level directory. Selecting a file outlines the files it
-usually changes with, so a hidden cluster becomes visible at a glance.
+usually changes with, so a hidden cluster becomes visible at a glance. Clicking a folder's
+name opens it, handing its contents the whole canvas; hovering a rectangle too small to
+carry a name magnifies the area around it.
 
 **The ownership map** — the same rectangles, coloured by whoever has the most commits to
 each file, and faded toward grey where no one person has a real claim on it. Blocks of one
