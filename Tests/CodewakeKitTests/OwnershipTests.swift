@@ -174,6 +174,92 @@ struct OwnershipTests {
     }
 }
 
+@Suite("Age")
+struct AgeTests {
+    /// In `HistoryFixture.mixed`, `README.md` is written at commit 0, deleted at 3, and
+    /// written again at 5; commits are 100 seconds apart.
+    private var engine: SnapshotEngine { SnapshotEngine(history: HistoryFixture.mixed) }
+
+    private func age(of path: String, at index: Int) throws -> FileAge {
+        var engine = self.engine
+        engine.move(to: index)
+        return try #require(engine.ages().files.first { $0.path == path })
+    }
+
+    @Test("Age is measured from the playhead, not from now")
+    func measuredFromPlayhead() throws {
+        let atOne = try age(of: "README.md", at: 1)
+        let atTwo = try age(of: "README.md", at: 2)
+
+        // Nothing touched the file between the two positions, so it can only have got older,
+        // and by exactly the time between the commits.
+        #expect(atOne.age == 100)
+        #expect(atTwo.age == 200)
+        #expect(atOne.lastTouchedIndex == 0)
+        #expect(atTwo.lastTouchedIndex == 0)
+    }
+
+    @Test("A file that is touched again becomes new")
+    func changingResetsAge() throws {
+        let stale = try age(of: "README.md", at: 2)
+        let fresh = try age(of: "README.md", at: 5)
+
+        #expect(stale.age == 200)
+        #expect(fresh.age == 0)
+        #expect(fresh.lastTouchedIndex == 5)
+    }
+
+    @Test("A rename counts as a touch")
+    func renameIsATouch() throws {
+        // src/app.swift is renamed at commit 2 and not otherwise changed after commit 1.
+        let atRename = try age(of: "src/core/app.swift", at: 2)
+        let after = try age(of: "src/core/app.swift", at: 3)
+
+        #expect(atRename.age == 0)
+        #expect(after.age == 100)
+        #expect(after.lastTouchedIndex == 2)
+    }
+
+    /// Scrubbing back has to give the same answer as never having gone forward — the same
+    /// property the snapshot engine guarantees for everything else it tracks.
+    @Test("Scrubbing back to a position restores the ages it had")
+    func backwardsMatchesForwards() {
+        var forward = engine
+        forward.move(to: 1)
+        let expected = forward.ages()
+
+        var wandered = engine
+        wandered.move(to: 4)
+        wandered.move(to: 1)
+        let actual = wandered.ages()
+
+        #expect(actual.files == expected.files)
+        #expect(actual.medianAge == expected.medianAge)
+    }
+
+    @Test("Ages are read against the repository's own lifetime")
+    func shareIsRelativeToTheRepository() throws {
+        var engine = self.engine
+        engine.move(to: 4)
+        let report = engine.ages()
+
+        #expect(report.span > 0)
+        #expect(report.files.allSatisfy { (0...1).contains($0.share) })
+        // Nothing predates the first commit, so nothing is older than the repository.
+        #expect(report.files.allSatisfy { $0.age <= report.span + 1 })
+    }
+
+    @Test("An empty repository reports nothing rather than dividing by zero")
+    func emptyHistory() {
+        var engine = self.engine
+        engine.move(to: -1)
+        let report = engine.ages()
+        #expect(report.files.isEmpty)
+        #expect(report.span > 0)
+        #expect(report.medianAge == 0)
+    }
+}
+
 /// Serves a fixed list of commits, so tests can exercise `AnalysisEngine.load` without
 /// building a git repository on disk.
 private struct StubHistoryProvider: HistoryProvider {

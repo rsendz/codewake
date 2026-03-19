@@ -101,6 +101,16 @@ struct BenchmarkTests {
         let cachedOwnership = await seconds { _ = await loaded.ownership(at: commits - 1) }
         print("cached ownership: \((cachedOwnership * 1000).formatted(.number.precision(.fractionLength(2))))ms")
 
+        // Age asks the same shape of question over the same set of files, but reads each
+        // file's last applied event instead of walking its history. On a repository whose
+        // files have short histories that buys nothing measurable — the per-file work
+        // dominates — so this is a ceiling, not a comparison.
+        var ageReport: AgeReport?
+        let ageTime = await seconds { ageReport = await loaded.ages(at: commits - 2) }
+        let ages = try #require(ageReport)
+        print("age: \(ages.files.count) files, median \((ages.medianAge / 86_400).formatted(.number.precision(.fractionLength(0))))d, \(ages.dormantFiles) dormant in \((ageTime * 1000).formatted(.number.precision(.fractionLength(2))))ms")
+        #expect(ageTime < 1.0, "age must not stall the settle after a scrub")
+
         // The treemap is laid out from scratch on every draw, so it has to be cheap at the
         // size the view actually asks for.
         let hotspots = await loaded.hotspots(at: commits - 1)

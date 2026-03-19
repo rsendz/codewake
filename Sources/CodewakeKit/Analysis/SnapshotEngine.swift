@@ -301,3 +301,90 @@ extension SnapshotEngine {
         }
     }
 }
+
+// MARK: - Age
+
+extension SnapshotEngine {
+    /// How long each live file has gone untouched, as of the current position.
+    ///
+    /// Every file's last applied event is already the cursor the engine maintains for
+    /// scrubbing, so this is one array lookup per live file with no history to walk. That
+    /// does not show up on a repository whose files have short histories — the per-file work
+    /// dominates and this lands level with ownership — but it is what keeps the cost flat as
+    /// those histories get long. Same shape of question as ownership, same route through the
+    /// UI.
+    public func ages() -> AgeReport {
+        guard commitIndex >= 0, !history.commits.isEmpty else { return .empty }
+        let now = history.commits[commitIndex].date
+        // Ages are read as a share of how long the repository had existed by this point, not
+        // in absolute years. A six-month-old project and a fifteen-year-old one then use the
+        // same full range of colour, and "old for this codebase" means what it says.
+        let span = max(now.timeIntervalSince(history.commits[0].date), 1)
+
+        var files: [FileAge] = []
+        files.reserveCapacity(aliveFileCount)
+        var byDirectory: [String: (files: Int, lines: Int, ages: [TimeInterval])] = [:]
+        var totalLines = 0
+        var dormantFiles = 0
+        var dormantLines = 0
+
+        for id in 0..<states.count where isAlive(id) {
+            let applied = states[id].appliedEvents
+            guard applied > 0 else { continue }
+            let event = history.files[id].events[applied - 1]
+            let lastTouched = history.commits[event.commitIndex].date
+            let age = max(now.timeIntervalSince(lastTouched), 0)
+            let path = history.files[id].path(at: commitIndex)
+            let lines = max(states[id].lines, 0)
+
+            files.append(FileAge(
+                id: id,
+                path: path,
+                lines: lines,
+                lastTouchedIndex: event.commitIndex,
+                lastTouched: lastTouched,
+                age: age,
+                share: min(age / span, 1)
+            ))
+
+            let components = path.split(separator: "/")
+            let directory = components.count > 1 ? String(components[0]) : "/"
+            byDirectory[directory, default: (0, 0, [])].files += 1
+            byDirectory[directory]!.lines += lines
+            byDirectory[directory]!.ages.append(age)
+
+            totalLines += lines
+            if age >= AgeReport.dormantAfter {
+                dormantFiles += 1
+                dormantLines += lines
+            }
+        }
+
+        let directories = byDirectory
+            .map { name, value in
+                DirectoryAge(
+                    name: name, files: value.files, lines: value.lines,
+                    medianAge: medianInterval(value.ages)
+                )
+            }
+            .sorted { ($0.medianAge, $1.name) > ($1.medianAge, $0.name) }
+
+        return AgeReport(
+            commitIndex: commitIndex,
+            now: now,
+            span: span,
+            files: files.sorted { ($0.lines, $1.path) > ($1.lines, $0.path) },
+            directories: directories,
+            totalLines: totalLines,
+            medianAge: medianInterval(files.map(\.age)),
+            dormantFiles: dormantFiles,
+            dormantLines: dormantLines
+        )
+    }
+
+    private func medianInterval(_ values: [TimeInterval]) -> TimeInterval {
+        guard !values.isEmpty else { return 0 }
+        let sorted = values.sorted()
+        return sorted[sorted.count / 2]
+    }
+}

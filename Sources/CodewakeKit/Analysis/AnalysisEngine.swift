@@ -90,6 +90,7 @@ public actor AnalysisEngine {
     /// Ownership costs a pass over every live file's history, so the answer for a position
     /// is kept until the playhead moves off it.
     private var ownershipCache: OwnershipReport?
+    private var ageCache: AgeReport?
     /// Immutable once loaded, so the UI can read repository metadata without awaiting.
     public nonisolated let summary: RepositorySummary
 
@@ -226,6 +227,20 @@ public actor AnalysisEngine {
         }
         let report = snapshots.ownership()
         ownershipCache = report
+        return report
+    }
+
+    /// How long every live file has gone untouched at `index`.
+    ///
+    /// Cached the same way ownership is, though it needs the cache far less: it reads each
+    /// file's last applied event rather than walking its history.
+    public func ages(at index: Int) -> AgeReport {
+        snapshots.move(to: index)
+        if let cached = ageCache, cached.commitIndex == snapshots.commitIndex {
+            return cached
+        }
+        let report = snapshots.ages()
+        ageCache = report
         return report
     }
 
