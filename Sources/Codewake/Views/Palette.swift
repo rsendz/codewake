@@ -87,6 +87,24 @@ enum Palette {
         }
     }
 
+    /// Age is a third kind of fact again, so it gets a third scale: one hue losing its
+    /// light rather than a journey across the wheel. Code that was touched today is lit;
+    /// code nobody has opened since the repository started has gone out. Nothing here can
+    /// be mistaken for a hotspot or for a person.
+    private static let ageRamp: [(stop: Double, color: (r: Double, g: Double, b: Double))] = [
+        (0.00, (0.63, 0.93, 0.87)),
+        (0.22, (0.36, 0.74, 0.76)),
+        (0.50, (0.23, 0.47, 0.58)),
+        (0.78, (0.19, 0.27, 0.36)),
+        (1.00, (0.13, 0.15, 0.19)),
+    ]
+
+    /// `share` is the file's age over the repository's own age at this point, so the scale
+    /// means the same thing in a six-month-old project and a fifteen-year-old one.
+    static func age(_ share: Double) -> Color {
+        interpolate(ageRamp, at: share)
+    }
+
     /// Cool for quiet code, hot for code that is both complex and frequently changed.
     /// Stops are interpolated pairwise so the ramp never drifts through a muddy midpoint
     /// the way a straight blue-to-amber blend would.
@@ -99,7 +117,16 @@ enum Palette {
     ]
 
     static func hotspot(_ score: Double) -> Color {
-        let value = min(max(score, 0), 1)
+        interpolate(ramp, at: score)
+    }
+
+    /// Walks a ramp of stops pairwise rather than blending end to end, so a scale never
+    /// drifts through the muddy midpoint a straight two-colour interpolation would give.
+    private static func interpolate(
+        _ ramp: [(stop: Double, color: (r: Double, g: Double, b: Double))],
+        at value: Double
+    ) -> Color {
+        let value = min(max(value, 0), 1)
         for (lower, upper) in zip(ramp, ramp.dropFirst()) where value <= upper.stop {
             let span = upper.stop - lower.stop
             let t = span > 0 ? (value - lower.stop) / span : 0
