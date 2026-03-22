@@ -91,6 +91,7 @@ public actor AnalysisEngine {
     /// is kept until the playhead moves off it.
     private var ownershipCache: OwnershipReport?
     private var ageCache: AgeReport?
+    private var couplingCache: CouplingReport?
     /// Immutable once loaded, so the UI can read repository metadata without awaiting.
     public nonisolated let summary: RepositorySummary
 
@@ -241,6 +242,20 @@ public actor AnalysisEngine {
         }
         let report = snapshots.ages()
         ageCache = report
+        return report
+    }
+
+    /// Which files change together across the whole snapshot at `index`.
+    ///
+    /// The most expensive of the three, because it is the only one that has to build a table
+    /// rather than read one. Cached against the position for the same reason.
+    public func couplingClusters(at index: Int) -> CouplingReport {
+        snapshots.move(to: index)
+        if let cached = couplingCache, cached.commitIndex == snapshots.commitIndex {
+            return cached
+        }
+        let report = snapshots.couplingClusters()
+        couplingCache = report
         return report
     }
 
