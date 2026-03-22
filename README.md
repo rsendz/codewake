@@ -66,7 +66,7 @@ term the interface uses.
 | `←` `→` | Step one commit |
 | `Space` / `⌘P` | Play or pause |
 | `⌘⌥←` `⌘⌥→` | Jump to the first or last commit |
-| `⌘1` `⌘2` | Switch between the map and ownership |
+| `⌘1` `⌘2` `⌘3` | Switch between the map, ownership, and age |
 | `⌘F` | Filter files — matches stay lit, everything else dims |
 | Click a folder's name | Open it — its files get the whole canvas |
 | `Esc` | Clear the search, the author, the selection, then step back out |
@@ -86,6 +86,12 @@ much of the code has only ever been touched by one person, and how few people it
 to lose half of it.
 
 ![The ownership map, coloured by who owns each file](docs/ownership.png)
+
+**The age map** — the same rectangles again, coloured by how long it has been since anyone
+touched each file. Bright is where the work is; dark is code nobody has had a reason to
+open, which is either the stable foundation or the part everyone is afraid of. Scrubbing
+makes the point better than a screenshot can: play the history and watch the codebase cool
+behind the playhead as the work moves on.
 
 **The inspector** — for the selected file at the selected moment: its size, its churn, its
 nesting depth, who has touched it, what it changes with, and how its churn was distributed
@@ -149,13 +155,20 @@ the second is git's own history, at 60,896 non-merge commits (82,154 including m
 
 | Operation | 1,836 commits | 60,896 commits |
 | --- | --- | --- |
-| Load and index | 0.83s | 25s |
-| Scrub step (cached) | 0.05ms | 0.17ms |
-| Repository-wide ownership | 1ms | 16ms |
-| Treemap layout, 250 tiles | 0.34ms | 0.16ms |
-| First complexity measurement | 0.15s | 0.83s |
-| Repeat measurement (cached) | 0.19ms | 0.49ms |
-| Memory, resident | 17 MB | 159 MB |
+| Load and index | 0.62s | 25s † |
+| Scrub step (cached) | 0.05ms | 0.17ms † |
+| Repository-wide ownership | 1ms | 16ms † |
+| Repository-wide file age | 1.1ms | — |
+| Treemap layout, 250 tiles | 0.37ms | 0.16ms † |
+| First complexity measurement | 0.15s | 0.83s † |
+| Repeat measurement (cached) | 0.21ms | 0.49ms † |
+| Memory, resident | 18 MB | 159 MB † |
+
+† Measured on an earlier build and not re-run since. Load got faster when the branch view
+was removed — that was a second `git log` pass — and the treemap gained a pass of its own,
+so the figures marked will have moved. They are left in because the shape of the answer is
+what the column is for, and the shape has not changed. The age view was added after that
+run and has only been measured on the smaller repository.
 
 Everything that happens while the app is open stays far inside a frame at both sizes, and
 memory grows roughly with the number of file events rather than with the number of commits.
@@ -174,11 +187,11 @@ Reproduce with `CODEWAKE_BENCH_REPO=~/some/repo swift test -c release --filter B
 swift test
 ```
 
-60 tests covering the log parser against real git output (renames, binary files,
+71 tests covering the log parser against real git output (renames, binary files,
 deletions, awkward commit subjects), the snapshot engine's forward/backward equivalence,
-coupling thresholds, ownership and bus factor as the playhead moves, complexity
-scoring, treemap geometry, and an end-to-end pass over a repository the test builds
-itself.
+coupling thresholds, ownership and bus factor as the playhead moves, file age across
+scrubs and renames, complexity scoring, treemap geometry including that no file is ever
+too small to be drawn, and an end-to-end pass over a repository the test builds itself.
 
 GitHub Actions runs the same tests on every push, then builds and signs `Codewake.app` and
 attaches it to any tagged release.
