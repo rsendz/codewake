@@ -30,12 +30,14 @@ final class AppState {
     enum ViewMode: String, CaseIterable, Identifiable {
         case map = "Map"
         case ownership = "Ownership"
+        case age = "Age"
         var id: String { rawValue }
 
         var symbol: String {
             switch self {
             case .map: "square.grid.2x2"
             case .ownership: "person.2"
+            case .age: "clock.arrow.circlepath"
             }
         }
     }
@@ -45,8 +47,9 @@ final class AppState {
     private(set) var hotspots: [Hotspot] = []
     private(set) var statistics: SnapshotStatistics?
     private(set) var isRefining = false
-    private(set) var isComputingOwnership = false
+    private(set) var isComputingDerived = false
     private(set) var ownership: OwnershipReport?
+    private(set) var ages: AgeReport?
     /// Author-to-colour assignment, fixed for the life of the loaded repository so a person
     /// keeps their colour however far the playhead moves.
     private(set) var authorColors = AuthorColors(ranking: [])
@@ -80,7 +83,7 @@ final class AppState {
     private var refineTask: Task<Void, Never>?
     private var detailTask: Task<Void, Never>?
     private var derivedTask: Task<Void, Never>?
-    /// Only the newest derived-view task may clear `isComputingOwnership`. Cancelling a
+    /// Only the newest derived-view task may clear `isComputingDerived`. Cancelling a
     /// task does not run its `defer` synchronously — it fires whenever that task next gets
     /// scheduled, which is after the replacement has already set the flag.
     private var derivedGeneration = 0
@@ -124,6 +127,7 @@ final class AppState {
                 self.searchText = ""
                 self.detail = nil
                 self.ownership = nil
+                self.ages = nil
                 self.highlightedAuthor = nil
                 self.phase = .ready
                 self.rememberRecent(url)
@@ -169,6 +173,7 @@ final class AppState {
         mapRoot = []
         detail = nil
         ownership = nil
+        ages = nil
         highlightedAuthor = nil
         searchText = ""
         phase = .welcome
@@ -239,15 +244,16 @@ final class AppState {
         derivedGeneration += 1
         let generation = derivedGeneration
 
-        guard let engine, viewMode == .ownership else {
-            isComputingOwnership = false
+        guard let engine, viewMode != .map else {
+            isComputingDerived = false
             return
         }
         let index = commitIndex
-        isComputingOwnership = true
+        let mode = viewMode
+        isComputingDerived = true
 
         derivedTask = Task {
-            defer { if generation == self.derivedGeneration { isComputingOwnership = false } }
+            defer { if generation == self.derivedGeneration { isComputingDerived = false } }
             // Playback is already rate-limited to 20 steps a second, so waiting again just
             // means never arriving.
             if !isPlaying {
@@ -255,9 +261,18 @@ final class AppState {
                 guard !Task.isCancelled else { return }
             }
 
-            let report = await engine.ownership(at: index)
-            guard !Task.isCancelled, index == self.commitIndex else { return }
-            self.ownership = report
+            switch mode {
+            case .ownership:
+                let report = await engine.ownership(at: index)
+                guard !Task.isCancelled, index == self.commitIndex else { return }
+                self.ownership = report
+            case .age:
+                let report = await engine.ages(at: index)
+                guard !Task.isCancelled, index == self.commitIndex else { return }
+                self.ages = report
+            case .map:
+                break
+            }
         }
     }
 

@@ -118,6 +118,26 @@ struct MainView: View {
                         highlightedAuthor: state.highlightedAuthor,
                         onHighlight: { state.highlightedAuthor = $0 }
                     )
+                case .age:
+                    let report = state.ages ?? .empty
+                    VStack(spacing: 0) {
+                        breadcrumb
+                        AgeView(
+                            report: report,
+                            isLoading: state.ages == nil,
+                            selection: state.selection,
+                            depth: state.mapRoot.count,
+                            pathPrefix: state.rootPrefix,
+                            onSelect: { state.select($0) },
+                            onOpen: { state.open(directory: $0) }
+                        )
+                        ageFooter(report)
+                    }
+                    AgeDetailView(
+                        report: report,
+                        detail: state.detail,
+                        onOpen: { state.open(directory: $0) }
+                    )
                 }
             }
 
@@ -169,7 +189,7 @@ struct MainView: View {
 
             Spacer()
 
-            if state.isRefining || state.isComputingOwnership {
+            if state.isRefining || state.isComputingDerived {
                 ProgressView()
                     .controlSize(.mini)
                     .help("Measuring complexity")
@@ -295,6 +315,42 @@ struct MainView: View {
         .padding(.vertical, 7)
         .background(Palette.canvas)
         .overlay(alignment: .top) { Rectangle().fill(Palette.hairline).frame(height: 1) }
+    }
+
+    /// The age scale, labelled with what its ends actually mean for this repository rather
+    /// than with abstract words — "3.4 years" is readable, "old" is not.
+    private func ageFooter(_ report: AgeReport) -> some View {
+        HStack(spacing: 10) {
+            Text("today")
+                .font(.system(size: 9))
+                .foregroundStyle(Palette.faintText)
+            LinearGradient(
+                colors: stride(from: 0.0, through: 1.0, by: 0.05).map { Palette.age($0) },
+                startPoint: .leading, endPoint: .trailing
+            )
+            .frame(width: 150, height: 6)
+            .clipShape(Capsule())
+            Text(oldest(in: report).map { "untouched for \(Age.span($0))" } ?? "untouched")
+                .font(.system(size: 9))
+                .foregroundStyle(Palette.faintText)
+
+            Spacer()
+
+            if report.files.count > AgeView.tileLimit {
+                Text("showing the \(AgeView.tileLimit) largest of \(report.files.count.formatted()) files")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.faintText)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+        .background(Palette.canvas)
+        .overlay(alignment: .top) { Rectangle().fill(Palette.hairline).frame(height: 1) }
+    }
+
+    /// The oldest file currently on the map, which is the far end of the age scale.
+    private func oldest(in report: AgeReport) -> TimeInterval? {
+        report.files.prefix(AgeView.tileLimit).map(\.age).max()
     }
 
     /// The colour scale, always on screen. The map is unreadable without knowing which end

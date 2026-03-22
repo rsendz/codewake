@@ -87,6 +87,10 @@ struct HelpView: View {
                     "The person with the most commits to a file owns it. The ownership map colours every file by its owner, and fades a file toward grey when no one person has a real claim on it. Commits, not surviving lines: `git blame` credits whoever last reformatted a file, which moves no knowledge."
                 )
                 Term(
+                    "Age",
+                    "How long it has been since anyone touched a file, as of the playhead. The age map is bright where the work is and dark where it stopped. It is read against the repository's own lifetime and against the other files on screen, so a six-month-old project and a fifteen-year-old one both use the full range of colour."
+                )
+                Term(
                     "Bus factor",
                     "How few people it would take to lose half of this codebase's owners. A bus factor of one means a single person is the main author of half the code. It is a rough count, not a prediction — but a low one is worth knowing about before it becomes urgent."
                 )
@@ -119,7 +123,7 @@ struct HelpView: View {
                 Shortcut("Space", "Play or pause")
                 Shortcut("⌘ ⌥ ←  /  ⌘ ⌥ →", "Jump to the first or last commit")
                 Shortcut("⌘F", "Search files — matches stay lit, the rest dim")
-                Shortcut("⌘1  ⌘2", "Map, ownership")
+                Shortcut("⌘1  ⌘2  ⌘3", "Map, ownership, age")
                 Shortcut("Esc", "Clear the search, the author, then the selection")
                 Shortcut("⌘O", "Open another repository")
             }
