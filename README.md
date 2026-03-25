@@ -66,7 +66,7 @@ term the interface uses.
 | `←` `→` | Step one commit |
 | `Space` / `⌘P` | Play or pause |
 | `⌘⌥←` `⌘⌥→` | Jump to the first or last commit |
-| `⌘1` `⌘2` `⌘3` | Switch between the map, ownership, and age |
+| `⌘1` … `⌘4` | Switch between the map, ownership, age, and coupling |
 | `⌘F` | Filter files — matches stay lit, everything else dims |
 | Click a folder's name | Open it — its files get the whole canvas |
 | `Esc` | Clear the search, the author, the selection, then step back out |
@@ -92,6 +92,12 @@ touched each file. Bright is where the work is; dark is code nobody has had a re
 open, which is either the stable foundation or the part everyone is afraid of. Scrubbing
 makes the point better than a screenshot can: play the history and watch the codebase cool
 behind the playhead as the work moves on.
+
+**The coupling map** — every group of files that changes together, drawn as a constellation
+per group. The inspector answers this for one file, but only once you have guessed which
+file to click; this is the same fact without the guess. Not a treemap, deliberately: the
+other three views are about a property each file has, and this one is about a relation
+between files, which rectangles cannot draw.
 
 **The inspector** — for the selected file at the selected moment: its size, its churn, its
 nesting depth, who has touched it, what it changes with, and how its churn was distributed
@@ -125,13 +131,21 @@ backwards exactly as cheap and exactly as accurate as stepping forwards — ther
 log. A property test asserts that scrubbing to a position from either direction produces
 identical state.
 
-**Coupling needs no index.** Finding what a file changes with looks like it needs a
+**Coupling needs no index — until you ask about all of it.** Finding what a file changes with looks like it needs a
 precomputed table of every file pair, which is expensive to build and to keep correct
 while scrubbing. It does not: a file's own event list already names every commit that
 touched it, and each of those commits already names every other file it touched. Walking
 that costs a pass over one file's history, so coupling is answered on demand for whatever
-was just clicked. Commits touching more than 25 files are ignored — a mass rename couples
-everything to everything and means nothing.
+was just clicked. Asked about the whole snapshot there is no file to start from, so the
+coupling view does build the pair table — but only over the commits actually scrubbed
+through, and only over commits small enough to mean something, which caps what any one
+commit can contribute at a few hundred pairs however large the repository is. Commits
+touching more than 25 files are ignored throughout — a mass rename couples everything to
+everything and means nothing.
+
+Strength is measured against the rarer of the two files rather than the busier one. A file
+touched in nearly every commit would otherwise look coupled to the entire codebase, when
+what it is, is busy.
 
 **Ownership is counted in commits, not surviving lines.** `git blame` answers "whose lines
 are these right now", which is the fragile version of the question: one reformat or one
@@ -158,7 +172,8 @@ the second is git's own history, at 60,896 non-merge commits (82,154 including m
 | Load and index | 0.62s | 25s † |
 | Scrub step (cached) | 0.05ms | 0.17ms † |
 | Repository-wide ownership | 1ms | 16ms † |
-| Repository-wide file age | 1.1ms | — |
+| Repository-wide file age | 1.0ms | — |
+| Coupling clusters, whole snapshot | 0.9ms | — |
 | Treemap layout, 250 tiles | 0.37ms | 0.16ms † |
 | First complexity measurement | 0.15s | 0.83s † |
 | Repeat measurement (cached) | 0.21ms | 0.49ms † |
@@ -187,10 +202,10 @@ Reproduce with `CODEWAKE_BENCH_REPO=~/some/repo swift test -c release --filter B
 swift test
 ```
 
-71 tests covering the log parser against real git output (renames, binary files,
+77 tests covering the log parser against real git output (renames, binary files,
 deletions, awkward commit subjects), the snapshot engine's forward/backward equivalence,
-coupling thresholds, ownership and bus factor as the playhead moves, file age across
-scrubs and renames, complexity scoring, treemap geometry including that no file is ever
+coupling thresholds and cluster extraction, ownership and bus factor as the playhead
+moves, file age across scrubs and renames, complexity scoring, treemap geometry including that no file is ever
 too small to be drawn, and an end-to-end pass over a repository the test builds itself.
 
 GitHub Actions runs the same tests on every push, then builds and signs `Codewake.app` and
