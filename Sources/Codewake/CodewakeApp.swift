@@ -81,6 +81,8 @@ struct CodewakeApp: App {
                     .keyboardShortcut("2", modifiers: .command)
                 Button("Show Age") { state.viewMode = .age }
                     .keyboardShortcut("3", modifiers: .command)
+                Button("Show Coupling") { state.viewMode = .coupling }
+                    .keyboardShortcut("4", modifiers: .command)
                 Divider()
                 Button("Close Repository") { state.closeRepository() }
                     .keyboardShortcut("w", modifiers: [.command, .shift])

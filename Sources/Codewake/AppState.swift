@@ -31,6 +31,7 @@ final class AppState {
         case map = "Map"
         case ownership = "Ownership"
         case age = "Age"
+        case coupling = "Coupling"
         var id: String { rawValue }
 
         var symbol: String {
@@ -38,6 +39,7 @@ final class AppState {
             case .map: "square.grid.2x2"
             case .ownership: "person.2"
             case .age: "clock.arrow.circlepath"
+            case .coupling: "point.3.connected.trianglepath.dotted"
             }
         }
     }
@@ -50,6 +52,7 @@ final class AppState {
     private(set) var isComputingDerived = false
     private(set) var ownership: OwnershipReport?
     private(set) var ages: AgeReport?
+    private(set) var coupling: CouplingReport?
     /// Author-to-colour assignment, fixed for the life of the loaded repository so a person
     /// keeps their colour however far the playhead moves.
     private(set) var authorColors = AuthorColors(ranking: [])
@@ -128,6 +131,7 @@ final class AppState {
                 self.detail = nil
                 self.ownership = nil
                 self.ages = nil
+                self.coupling = nil
                 self.highlightedAuthor = nil
                 self.phase = .ready
                 self.rememberRecent(url)
@@ -174,6 +178,7 @@ final class AppState {
         detail = nil
         ownership = nil
         ages = nil
+        coupling = nil
         highlightedAuthor = nil
         searchText = ""
         phase = .welcome
@@ -270,6 +275,10 @@ final class AppState {
                 let report = await engine.ages(at: index)
                 guard !Task.isCancelled, index == self.commitIndex else { return }
                 self.ages = report
+            case .coupling:
+                let report = await engine.couplingClusters(at: index)
+                guard !Task.isCancelled, index == self.commitIndex else { return }
+                self.coupling = report
             case .map:
                 break
             }

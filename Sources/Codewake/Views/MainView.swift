@@ -138,6 +138,19 @@ struct MainView: View {
                         detail: state.detail,
                         onOpen: { state.open(directory: $0) }
                     )
+                case .coupling:
+                    let report = state.coupling ?? .empty
+                    CouplingView(
+                        report: report,
+                        isLoading: state.coupling == nil,
+                        selection: state.selection,
+                        onSelect: { state.select($0) }
+                    )
+                    CouplingDetailView(
+                        report: report,
+                        selection: state.selection,
+                        onSelect: { state.select($0) }
+                    )
                 }
             }
 

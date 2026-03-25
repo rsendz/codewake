@@ -87,6 +87,10 @@ struct HelpView: View {
                     "The person with the most commits to a file owns it. The ownership map colours every file by its owner, and fades a file toward grey when no one person has a real claim on it. Commits, not surviving lines: `git blame` credits whoever last reformatted a file, which moves no knowledge."
                 )
                 Term(
+                    "Coupling cluster",
+                    "A group of files that keep changing in the same commits, directly or through each other. The coupling view finds them across the whole snapshot rather than for one file you had to guess at, so a region of the codebase that is quietly welded together shows up on its own."
+                )
+                Term(
                     "Age",
                     "How long it has been since anyone touched a file, as of the playhead. The age map is bright where the work is and dark where it stopped. It is read against the repository's own lifetime and against the other files on screen, so a six-month-old project and a fifteen-year-old one both use the full range of colour."
                 )
@@ -123,7 +127,7 @@ struct HelpView: View {
                 Shortcut("Space", "Play or pause")
                 Shortcut("⌘ ⌥ ←  /  ⌘ ⌥ →", "Jump to the first or last commit")
                 Shortcut("⌘F", "Search files — matches stay lit, the rest dim")
-                Shortcut("⌘1  ⌘2  ⌘3", "Map, ownership, age")
+                Shortcut("⌘1 … ⌘4", "Map, ownership, age, coupling")
                 Shortcut("Esc", "Clear the search, the author, then the selection")
                 Shortcut("⌘O", "Open another repository")
             }
