@@ -218,7 +218,7 @@ public enum TreemapLayout {
 
     /// Lays `values` out in `rect`, filling it completely, keeping each rectangle as close
     /// to square as the algorithm can manage. Returns one frame per value, in order.
-    static func squarify(_ values: [Double], in rect: CGRect) -> [CGRect] {
+    public static func squarify(_ values: [Double], in rect: CGRect) -> [CGRect] {
         var frames = [CGRect](repeating: .zero, count: values.count)
         let total = values.reduce(0, +)
         guard total > 0, rect.width > 0, rect.height > 0 else { return frames }
