@@ -1,5 +1,7 @@
 # Codewake
 
+<img src="docs/icon.png" alt="" width="104" align="right">
+
 A native macOS app that treats a Git repository's history as a timeline you can scrub.
 Drag the playhead and watch the codebase change: files appear, directories grow, hotspots
 heat up, the files that secretly change together light up, and the parts of the codebase
