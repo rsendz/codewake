@@ -95,11 +95,15 @@ open, which is either the stable foundation or the part everyone is afraid of. S
 makes the point better than a screenshot can: play the history and watch the codebase cool
 behind the playhead as the work moves on.
 
+![The age map, dark where the codebase has stopped moving](docs/age.png)
+
 **The coupling map** — every group of files that changes together, drawn as a constellation
 per group. The inspector answers this for one file, but only once you have guessed which
 file to click; this is the same fact without the guess. Not a treemap, deliberately: the
 other three views are about a property each file has, and this one is about a relation
 between files, which rectangles cannot draw.
+
+![The coupling map, one constellation per group of files that change together](docs/coupling.png)
 
 **The inspector** — for the selected file at the selected moment: its size, its churn, its
 nesting depth, who has touched it, what it changes with, and how its churn was distributed
