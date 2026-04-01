@@ -40,6 +40,8 @@ struct TreemapCanvas<Tooltip: View>: View {
     let onSelect: (FileID?) -> Void
     /// Clicking a directory's header opens it. Nil leaves headers inert.
     var onOpen: ((String) -> Void)?
+    /// Whether hovering a rectangle too small to carry a name magnifies the area around it.
+    var magnifies: Bool = true
     @ViewBuilder let tooltip: (TreemapTile) -> Tooltip
 
     @State private var hovered: TreemapTile?
@@ -84,7 +86,7 @@ struct TreemapCanvas<Tooltip: View>: View {
                     // A tile too small to carry a name gets the magnified view above the
                     // tooltip, as one panel: what is under the pointer, and what is around
                     // it. Two separate floating cards would overlap each other.
-                    if isTooSmallToLabel(hovered) {
+                    if magnifies, isTooSmallToLabel(hovered) {
                         placed(
                             VStack(alignment: .leading, spacing: 0) {
                                 loupe(around: pointer, in: groups)

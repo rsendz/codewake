@@ -23,6 +23,8 @@ struct AgeView: View {
     let pathPrefix: String
     let onSelect: (FileID?) -> Void
     let onOpen: (String) -> Void
+    /// Whether small rectangles magnify on hover.
+    let magnifies: Bool
 
     /// Same cap as the other maps: past this the rectangles are slivers and the summary in
     /// the inspector still counts every file.
@@ -46,6 +48,7 @@ struct AgeView: View {
             },
             onSelect: onSelect,
             onOpen: onOpen,
+            magnifies: magnifies,
             tooltip: { tile in
                 if let file = index[tile.id] { tooltip(for: file) }
             }

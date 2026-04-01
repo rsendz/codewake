@@ -22,6 +22,8 @@ struct TreemapView: View {
     let depth: Int
     let onSelect: (FileID?) -> Void
     let onOpen: (String) -> Void
+    /// Whether small rectangles magnify on hover.
+    let magnifies: Bool
 
     var body: some View {
         let index = Dictionary(hotspots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -38,6 +40,7 @@ struct TreemapView: View {
             },
             onSelect: onSelect,
             onOpen: onOpen,
+            magnifies: magnifies,
             tooltip: { tile in
                 if let hotspot = index[tile.id] { tooltip(for: hotspot) }
             }
