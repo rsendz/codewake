@@ -84,6 +84,13 @@ struct CodewakeApp: App {
                 Button("Show Coupling") { state.viewMode = .coupling }
                     .keyboardShortcut("4", modifiers: .command)
                 Divider()
+                Button(state.magnifiesSmallTiles
+                       ? "Turn Off Zoom on Small Files"
+                       : "Turn On Zoom on Small Files") {
+                    state.magnifiesSmallTiles.toggle()
+                }
+                .keyboardShortcut("l", modifiers: .command)
+                Divider()
                 Button("Close Repository") { state.closeRepository() }
                     .keyboardShortcut("w", modifiers: [.command, .shift])
                 }

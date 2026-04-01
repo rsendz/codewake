@@ -82,7 +82,8 @@ struct MainView: View {
                             searchMatches: state.searchMatches,
                             depth: state.mapRoot.count,
                             onSelect: { state.select($0) },
-                            onOpen: { state.open(directory: $0) }
+                            onOpen: { state.open(directory: $0) },
+                            magnifies: state.magnifiesSmallTiles
                         )
                         mapFooter
                     }
@@ -107,7 +108,8 @@ struct MainView: View {
                             depth: state.mapRoot.count,
                             pathPrefix: state.rootPrefix,
                             onSelect: { state.select($0) },
-                            onOpen: { state.open(directory: $0) }
+                            onOpen: { state.open(directory: $0) },
+                            magnifies: state.magnifiesSmallTiles
                         )
                         ownershipFooter(report)
                     }
@@ -129,7 +131,8 @@ struct MainView: View {
                             depth: state.mapRoot.count,
                             pathPrefix: state.rootPrefix,
                             onSelect: { state.select($0) },
-                            onOpen: { state.open(directory: $0) }
+                            onOpen: { state.open(directory: $0) },
+                            magnifies: state.magnifiesSmallTiles
                         )
                         ageFooter(report)
                     }
@@ -208,6 +211,7 @@ struct MainView: View {
                     .help("Measuring complexity")
             }
             if state.viewMode == .map { searchField }
+            if state.showsTreemap { magnifierToggle }
 
             Button { state.isShowingHelp = true } label: {
                 Image(systemName: "questionmark.circle")
@@ -225,6 +229,24 @@ struct MainView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .panelBackground()
+    }
+
+    /// Turns the small-file magnifier on and off. It lives here rather than in a
+    /// preferences window because it changes what the map does under the pointer, and that
+    /// is a decision you make while looking at the map.
+    private var magnifierToggle: some View {
+        Button { state.magnifiesSmallTiles.toggle() } label: {
+            // Not a plain magnifying glass: the search field beside it already has one of
+            // those, and this is not a search. A magnifier over a lettered rectangle is
+            // what the feature actually does.
+            Image(systemName: "rectangle.and.text.magnifyingglass")
+                .font(.system(size: 12))
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(state.magnifiesSmallTiles ? Palette.accent : Palette.faintText)
+        .help(state.magnifiesSmallTiles
+              ? "Zoom on small files is on — hovering a rectangle too small to name magnifies the area around it (⌘L)"
+              : "Zoom on small files is off (⌘L)")
     }
 
     private var searchField: some View {

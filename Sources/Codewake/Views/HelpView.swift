@@ -110,7 +110,7 @@ struct HelpView: View {
                 Bullet("Files are **grouped by top-level folder**, so the shape stays recognisable as you scrub.")
                 Bullet("Every file gets a rectangle, including the small ones — the smallest are lifted to a size you can see and click, which costs the largest files a fraction of a percent of their area.")
                 Bullet("**Click a folder's name to open it**, and its files get the whole canvas at a size you can read. `Esc` goes back out.")
-                Bullet("Hovering a rectangle too small to carry a name **magnifies the area around it**, so a dense corner can be read without leaving the overview.")
+                Bullet("Hovering a rectangle too small to carry a name **magnifies the area around it**, so a dense corner can be read without leaving the overview. The magnifying-glass button in the toolbar turns that off (`⌘L`) when you would rather read the shape of the map than pick files out of it.")
                 Bullet("Colour is **relative to the files on screen now**, and mostly to their ranking rather than their raw scores — so roughly the same share of any repository reads as hot, and early history still has contrast to read rather than being uniformly cold.")
 
                 LegendStrip()
@@ -127,6 +127,7 @@ struct HelpView: View {
                 Shortcut("Space", "Play or pause")
                 Shortcut("⌘ ⌥ ←  /  ⌘ ⌥ →", "Jump to the first or last commit")
                 Shortcut("⌘F", "Search files — matches stay lit, the rest dim")
+                Shortcut("⌘L", "Zoom on small files, on or off")
                 Shortcut("⌘1 … ⌘4", "Map, ownership, age, coupling")
                 Shortcut("Esc", "Clear the search, the author, then the selection")
                 Shortcut("⌘O", "Open another repository")

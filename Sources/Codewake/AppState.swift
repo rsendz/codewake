@@ -17,6 +17,9 @@ import SwiftUI
 /// the drag. Once the playhead has been still for a moment, a second pass reads whatever
 /// blobs are missing and replaces the estimate. Both paths tag results with the position
 /// they describe, so a slow refine landing late is discarded rather than shown.
+/// Not a static on `AppState`: a stored property's initializer cannot refer to `Self`.
+private let magnifierDefaultsKey = "magnifiesSmallTiles"
+
 @MainActor
 @Observable
 final class AppState {
@@ -63,6 +66,10 @@ final class AppState {
     private(set) var detail: FileDetail?
     private(set) var isPlaying = false
 
+    /// Whether the view on screen is one of the treemaps, which is what the magnifier and
+    /// the breadcrumb belong to. Coupling is drawn as a graph and has neither.
+    var showsTreemap: Bool { viewMode != .coupling }
+
     var viewMode: ViewMode = .map {
         didSet { refreshDerivedView() }
     }
@@ -75,6 +82,15 @@ final class AppState {
     /// level at which they can be read and worked with.
     private(set) var mapRoot: [String] = []
     var searchText: String = ""
+    /// Whether hovering a rectangle too small to carry a name magnifies the area around it.
+    ///
+    /// On by default — it is the thing that makes a dense corner readable at all — but it
+    /// follows the pointer everywhere, and someone reading the shape of the map rather than
+    /// picking files out of it will want it off. Remembered across launches, because it is a
+    /// preference about how you read a map rather than about the repository in front of you.
+    var magnifiesSmallTiles: Bool = UserDefaults.standard.object(forKey: magnifierDefaultsKey) as? Bool ?? true {
+        didSet { UserDefaults.standard.set(magnifiesSmallTiles, forKey: magnifierDefaultsKey) }
+    }
     var isShowingHelp = false
     /// Bumped to ask the search field to take focus. A plain Bool would not re-fire when
     /// the shortcut is pressed twice in a row.
