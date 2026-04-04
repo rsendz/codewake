@@ -71,6 +71,7 @@ term the interface uses.
 | `⌘1` … `⌘4` | Switch between the map, ownership, age, and coupling |
 | `⌘F` | Filter files — matches stay lit, everything else dims |
 | Click a folder's name | Open it — its files get the whole canvas |
+| `⌘L` | Zoom on small files, on or off |
 | `Esc` | Clear the search, the author, the selection, then step back out |
 
 ## What it shows
@@ -79,7 +80,7 @@ term the interface uses.
 hotspot score, grouped by top-level directory. Selecting a file outlines the files it
 usually changes with, so a hidden cluster becomes visible at a glance. Clicking a folder's
 name opens it, handing its contents the whole canvas; hovering a rectangle too small to
-carry a name magnifies the area around it.
+carry a name magnifies the area around it — `⌘L`, or the toolbar button, turns that off.
 
 **The ownership map** — the same rectangles, coloured by whoever has the most commits to
 each file, and faded toward grey where no one person has a real claim on it. Blocks of one
