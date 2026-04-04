@@ -139,20 +139,9 @@ struct MainView: View {
                     AgeDetailView(
                         report: report,
                         detail: state.detail,
-                        onOpen: { state.open(directory: $0) }
-                    )
-                case .coupling:
-                    let report = state.coupling ?? .empty
-                    CouplingView(
-                        report: report,
-                        isLoading: state.coupling == nil,
-                        selection: state.selection,
-                        onSelect: { state.select($0) }
-                    )
-                    CouplingDetailView(
-                        report: report,
-                        selection: state.selection,
-                        onSelect: { state.select($0) }
+                        // The panel lists the repository's top-level directories, not the
+                        // ones inside wherever the map happens to be opened to.
+                        onOpen: { state.open(topLevelDirectory: $0) }
                     )
                 }
             }
@@ -211,7 +200,7 @@ struct MainView: View {
                     .help("Measuring complexity")
             }
             if state.viewMode == .map { searchField }
-            if state.showsTreemap { magnifierToggle }
+            magnifierToggle
 
             Button { state.isShowingHelp = true } label: {
                 Image(systemName: "questionmark.circle")

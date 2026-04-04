@@ -34,7 +34,6 @@ final class AppState {
         case map = "Map"
         case ownership = "Ownership"
         case age = "Age"
-        case coupling = "Coupling"
         var id: String { rawValue }
 
         var symbol: String {
@@ -42,7 +41,6 @@ final class AppState {
             case .map: "square.grid.2x2"
             case .ownership: "person.2"
             case .age: "clock.arrow.circlepath"
-            case .coupling: "point.3.connected.trianglepath.dotted"
             }
         }
     }
@@ -55,7 +53,6 @@ final class AppState {
     private(set) var isComputingDerived = false
     private(set) var ownership: OwnershipReport?
     private(set) var ages: AgeReport?
-    private(set) var coupling: CouplingReport?
     /// Author-to-colour assignment, fixed for the life of the loaded repository so a person
     /// keeps their colour however far the playhead moves.
     private(set) var authorColors = AuthorColors(ranking: [])
@@ -65,10 +62,6 @@ final class AppState {
     private(set) var selection: FileID?
     private(set) var detail: FileDetail?
     private(set) var isPlaying = false
-
-    /// Whether the view on screen is one of the treemaps, which is what the magnifier and
-    /// the breadcrumb belong to. Coupling is drawn as a graph and has neither.
-    var showsTreemap: Bool { viewMode != .coupling }
 
     var viewMode: ViewMode = .map {
         didSet { refreshDerivedView() }
@@ -84,11 +77,12 @@ final class AppState {
     var searchText: String = ""
     /// Whether hovering a rectangle too small to carry a name magnifies the area around it.
     ///
-    /// On by default — it is the thing that makes a dense corner readable at all — but it
-    /// follows the pointer everywhere, and someone reading the shape of the map rather than
-    /// picking files out of it will want it off. Remembered across launches, because it is a
-    /// preference about how you read a map rather than about the repository in front of you.
-    var magnifiesSmallTiles: Bool = UserDefaults.standard.object(forKey: magnifierDefaultsKey) as? Bool ?? true {
+    /// Off until asked for. It follows the pointer everywhere, and a panel that opens each
+    /// time the cursor crosses a small tile is in the way of reading the shape of the map,
+    /// which is what most people are doing most of the time. Remembered across launches,
+    /// because it is a preference about how you read a map rather than about the repository
+    /// in front of you.
+    var magnifiesSmallTiles: Bool = UserDefaults.standard.object(forKey: magnifierDefaultsKey) as? Bool ?? false {
         didSet { UserDefaults.standard.set(magnifiesSmallTiles, forKey: magnifierDefaultsKey) }
     }
     var isShowingHelp = false
@@ -147,7 +141,6 @@ final class AppState {
                 self.detail = nil
                 self.ownership = nil
                 self.ages = nil
-                self.coupling = nil
                 self.highlightedAuthor = nil
                 self.phase = .ready
                 self.rememberRecent(url)
@@ -194,7 +187,6 @@ final class AppState {
         detail = nil
         ownership = nil
         ages = nil
-        coupling = nil
         highlightedAuthor = nil
         searchText = ""
         phase = .welcome
@@ -291,10 +283,6 @@ final class AppState {
                 let report = await engine.ages(at: index)
                 guard !Task.isCancelled, index == self.commitIndex else { return }
                 self.ages = report
-            case .coupling:
-                let report = await engine.couplingClusters(at: index)
-                guard !Task.isCancelled, index == self.commitIndex else { return }
-                self.coupling = report
             case .map:
                 break
             }
@@ -303,22 +291,71 @@ final class AppState {
 
     // MARK: - Opening a directory
 
+    /// Opens a subdirectory of wherever the map currently is.
+    ///
+    /// The name has to be one that exists at this level. Callers that hold a list of
+    /// top-level directories rather than of the current level's must use
+    /// `open(topLevelDirectory:)`, and this guard is what stops the difference from
+    /// producing a path that was never in the repository.
     func open(directory name: String) {
+        guard subdirectories().contains(name) else { return }
+        descend(into: name)
+    }
+
+    /// Jumps to a top-level directory from wherever the map is, rather than looking for one
+    /// inside the current one. The inspector's lists are of the whole repository, so this is
+    /// what their rows mean.
+    func open(topLevelDirectory name: String) {
+        mapRoot = []
+        guard subdirectories().contains(name) else { return }
+        descend(into: name)
+    }
+
+    private func descend(into name: String) {
         mapRoot.append(name)
         // A directory with exactly one subdirectory in it and nothing else is not a level
-        // worth stopping at — opening `web` to find only `src` wastes the click and
-        // the canvas. Keep descending until there is actually a choice to make.
+        // worth stopping at. Opening `web` to find only `src` wastes the click and the
+        // canvas, so keep going until there is actually a choice to make.
         while let only = onlySubdirectory() {
             mapRoot.append(only)
         }
+    }
+
+    /// Directory names one level below wherever the map currently is.
+    private func subdirectories() -> Set<String> {
+        let depth = mapRoot.count
+        var names: Set<String> = []
+        for path in visiblePaths {
+            let components = path.split(separator: "/")
+            guard components.count > depth + 1 else { continue }
+            names.insert(String(components[depth]))
+        }
+        return names
+    }
+
+    /// Paths of the files the view on screen is currently drawing.
+    ///
+    /// Each map draws a different set: the hotspot map takes the busiest files, ownership
+    /// and age take the largest. Navigation has to be answered against whichever one is in
+    /// front of the user, or a directory that is plainly on screen refuses to open because
+    /// it happens not to be in another view's selection.
+    private var visiblePaths: [String] {
+        let all: [String] = switch viewMode {
+        case .map: hotspots.map(\.path)
+        case .ownership: (ownership?.files ?? []).map(\.path)
+        case .age: (ages?.files ?? []).map(\.path)
+        }
+        guard !mapRoot.isEmpty else { return all }
+        let prefix = rootPrefix
+        return all.filter { $0.hasPrefix(prefix) }
     }
 
     /// The single subdirectory of the current root, when it is the only thing there.
     private func onlySubdirectory() -> String? {
         let depth = mapRoot.count
         var names: Set<String> = []
-        for hotspot in visibleHotspots {
-            let components = hotspot.path.split(separator: "/")
+        for path in visiblePaths {
+            let components = path.split(separator: "/")
             // A file sitting loose at this level means the level has content of its own.
             guard components.count > depth + 1 else { return nil }
             names.insert(String(components[depth]))
