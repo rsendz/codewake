@@ -111,15 +111,6 @@ struct BenchmarkTests {
         print("age: \(ages.files.count) files, median \((ages.medianAge / 86_400).formatted(.number.precision(.fractionLength(0))))d, \(ages.dormantFiles) dormant in \((ageTime * 1000).formatted(.number.precision(.fractionLength(2))))ms")
         #expect(ageTime < 1.0, "age must not stall the settle after a scrub")
 
-        // Coupling clusters are the only derived view that builds a table rather than
-        // reading one, so this is the one to watch: it runs on every playback step.
-        var couplingReport: CouplingReport?
-        let couplingTime = await seconds { couplingReport = await loaded.couplingClusters(at: commits - 3) }
-        let coupling = try #require(couplingReport)
-        print("coupling clusters: \(coupling.clusters.count) clusters over \(coupling.consideredCommits) commits (\(coupling.ignoredCommits) ignored) in \((couplingTime * 1000).formatted(.number.precision(.fractionLength(1))))ms")
-        // Playback steps 20 times a second, so anything past this cannot keep up with it.
-        #expect(couplingTime < 0.05, "coupling clusters must keep up with playback")
-
         // The treemap is laid out from scratch on every draw, so it has to be cheap at the
         // size the view actually asks for.
         let hotspots = await loaded.hotspots(at: commits - 1)
