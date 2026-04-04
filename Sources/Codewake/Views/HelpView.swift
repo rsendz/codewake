@@ -68,7 +68,7 @@ struct HelpView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Term(
                     "Churn",
-                    "How many lines have been added and deleted in a file over its life. High churn means the file keeps being rewritten. It is a measure of activity, not of quality — a file can churn because it is central and important, or because it is never quite right."
+                    "How many lines have been added and deleted in a file over its life. High churn means the file keeps being rewritten. It is a measure of activity, not of quality. A file can churn because it is central and important, or because it is never quite right."
                 )
                 Term(
                     "Complexity",
@@ -76,19 +76,15 @@ struct HelpView: View {
                 )
                 Term(
                     "Hotspot",
-                    "A file that is high in **both** churn and complexity. Neither alone is a problem — complicated code nobody touches is dormant, and a simple file edited constantly is usually fine. It is the combination that predicts where bugs and slow work come from, because it means people keep having to change something that is hard to change safely."
+                    "A file that is high in **both** churn and complexity. Neither alone is a problem: complicated code nobody touches is dormant, and a simple file edited constantly is usually fine. It is the combination that predicts where bugs and slow work come from, because it means people keep having to change something that is hard to change safely."
                 )
                 Term(
                     "Change coupling",
-                    "Two files are coupled when they keep being edited in the same commit. It often reveals a dependency the code does not state anywhere — if you always have to edit the parser whenever you edit the model, those two are joined whether or not either imports the other. Select a file to see its partners outlined on the map."
+                    "Two files are coupled when they keep being edited in the same commit. It often reveals a dependency the code does not state anywhere. If you always have to edit the parser whenever you edit the model, those two are joined whether or not either imports the other. Select a file to see its partners outlined on the map."
                 )
                 Term(
                     "Ownership",
                     "The person with the most commits to a file owns it. The ownership map colours every file by its owner, and fades a file toward grey when no one person has a real claim on it. Commits, not surviving lines: `git blame` credits whoever last reformatted a file, which moves no knowledge."
-                )
-                Term(
-                    "Coupling cluster",
-                    "A group of files that keep changing in the same commits, directly or through each other. The coupling view finds them across the whole snapshot rather than for one file you had to guess at, so a region of the codebase that is quietly welded together shows up on its own."
                 )
                 Term(
                     "Age",
@@ -96,7 +92,7 @@ struct HelpView: View {
                 )
                 Term(
                     "Bus factor",
-                    "How few people it would take to lose half of this codebase's owners. A bus factor of one means a single person is the main author of half the code. It is a rough count, not a prediction — but a low one is worth knowing about before it becomes urgent."
+                    "How few people it would take to lose half of this codebase's owners. A bus factor of one means a single person is the main author of half the code. It is a rough count, not a prediction, but a low one is worth knowing about before it becomes urgent."
                 )
             }
         }
@@ -105,13 +101,13 @@ struct HelpView: View {
     private var reading: some View {
         Section("Reading the map") {
             VStack(alignment: .leading, spacing: 12) {
-                Bullet("Each rectangle is a file. **Bigger means longer** — more lines of code.")
+                Bullet("Each rectangle is a file. **Bigger means longer**, meaning more lines of code.")
                 Bullet("**Colour is the hotspot score.** Cool blue is calm; orange and red are files that are both large or tangled and frequently changed.")
                 Bullet("Files are **grouped by top-level folder**, so the shape stays recognisable as you scrub.")
-                Bullet("Every file gets a rectangle, including the small ones — the smallest are lifted to a size you can see and click, which costs the largest files a fraction of a percent of their area.")
+                Bullet("Every file gets a rectangle, including the small ones. The smallest are lifted to a size you can see and click, which costs the largest files a fraction of a percent of their area.")
                 Bullet("**Click a folder's name to open it**, and its files get the whole canvas at a size you can read. `Esc` goes back out.")
-                Bullet("Hovering a rectangle too small to carry a name **magnifies the area around it**, so a dense corner can be read without leaving the overview. The magnifying-glass button in the toolbar turns that off (`⌘L`) when you would rather read the shape of the map than pick files out of it.")
-                Bullet("Colour is **relative to the files on screen now**, and mostly to their ranking rather than their raw scores — so roughly the same share of any repository reads as hot, and early history still has contrast to read rather than being uniformly cold.")
+                Bullet("Turn on **zoom on small files** with the toolbar button or `⌘L`, and hovering a rectangle too small to carry a name will enlarge the area around it, so a dense corner can be read without leaving the overview. It is off until you ask for it, because it follows the pointer everywhere.")
+                Bullet("Colour is **relative to the files on screen now**, and mostly to their ranking rather than their raw scores, so roughly the same share of any repository reads as hot and early history still has contrast to read rather than being uniformly cold.")
 
                 LegendStrip()
                     .padding(.top, 4)
@@ -126,9 +122,9 @@ struct HelpView: View {
                 Shortcut("← →", "Step one commit")
                 Shortcut("Space", "Play or pause")
                 Shortcut("⌘ ⌥ ←  /  ⌘ ⌥ →", "Jump to the first or last commit")
-                Shortcut("⌘F", "Search files — matches stay lit, the rest dim")
+                Shortcut("⌘F", "Search files, so matches stay lit and the rest dim")
                 Shortcut("⌘L", "Zoom on small files, on or off")
-                Shortcut("⌘1 … ⌘4", "Map, ownership, age, coupling")
+                Shortcut("⌘1  ⌘2  ⌘3", "Map, ownership, age")
                 Shortcut("Esc", "Clear the search, the author, then the selection")
                 Shortcut("⌘O", "Open another repository")
             }
@@ -138,7 +134,7 @@ struct HelpView: View {
     private var caveats: some View {
         Section("What it does not do") {
             VStack(alignment: .leading, spacing: 12) {
-                Bullet("Generated and vendored files — lock files, `node_modules`, build output — are **excluded**. They churn enormously and would take the top spot in every repository while telling you nothing.")
+                Bullet("Generated and vendored files such as lock files, `node_modules` and build output are **excluded**. They churn enormously and would take the top spot in every repository while telling you nothing.")
                 Bullet("Merge commits are skipped when counting churn, so work is not counted twice.")
                 Bullet("Only the current branch's history is read. Branches that were never merged do not appear.")
                 Bullet("Authors are counted by the name on the commit, so one person committing as **two different names** counts as two people.")
@@ -240,7 +236,7 @@ struct HelpView: View {
     }
 }
 
-/// The colour ramp with its ends labelled — shown in help and under the map, because a
+/// The colour ramp with its ends labelled, shown in help and under the map, because a
 /// colour scale nobody can decode is just decoration.
 struct LegendStrip: View {
     var body: some View {
