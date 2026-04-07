@@ -47,6 +47,9 @@ struct TreemapCanvas<Tooltip: View>: View {
     @State private var hovered: TreemapTile?
     @State private var hoveredHeader: String?
     @State private var pointer: CGPoint = .zero
+    /// Measured size of whatever is currently floating by the pointer, so it can be kept
+    /// inside the view. Guessing it meant a long path ran off the right edge.
+    @State private var panelSize: CGSize = .zero
 
     var body: some View {
         GeometryReader { proxy in
@@ -97,8 +100,7 @@ struct TreemapCanvas<Tooltip: View>: View {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Palette.hairline))
                             .shadow(color: .black.opacity(0.5), radius: 10, y: 3),
-                            in: proxy.size,
-                            size: CGSize(width: loupeSize.width, height: loupeSize.height + 56)
+                            in: proxy.size
                         )
                     } else {
                         placed(tooltip(hovered), in: proxy.size)
@@ -236,13 +238,14 @@ struct TreemapCanvas<Tooltip: View>: View {
     }
 
     /// Nudges a floating panel back inside the view when the pointer nears an edge.
-    private func placed(
-        _ panel: some View,
-        in size: CGSize,
-        size panelSize: CGSize = CGSize(width: 280, height: 56)
-    ) -> some View {
+    ///
+    /// The panel measures itself rather than being assumed to be some fixed size. A tooltip
+    /// is as wide as the path it carries, and a deeply nested one is far wider than any
+    /// guess worth hard-coding, so the guess was what pushed long paths off the right edge.
+    private func placed(_ panel: some View, in size: CGSize) -> some View {
         panel
             .fixedSize()
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { panelSize = $0 }
             .offset(
                 x: min(pointer.x + 12, max(size.width - panelSize.width, 0)),
                 y: min(pointer.y + 12, max(size.height - panelSize.height, 0))
@@ -256,7 +259,10 @@ struct TreemapTooltip<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
+        // Capped, because a path can be arbitrarily long and a card as wide as the window
+        // is worse than one that wraps onto a second line.
         VStack(alignment: .leading, spacing: 2) { content }
+            .frame(maxWidth: 320, alignment: .leading)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 6).fill(Color.black.opacity(0.88)))
