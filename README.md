@@ -68,21 +68,22 @@ term the interface uses.
 | `←` `→` | Step one commit |
 | `Space` / `⌘P` | Play or pause |
 | `⌘⌥←` `⌘⌥→` | Jump to the first or last commit |
-| `⌘1` … `⌘4` | Switch between the map, ownership, age, and coupling |
-| `⌘F` | Filter files — matches stay lit, everything else dims |
-| Click a folder's name | Open it — its files get the whole canvas |
+| `⌘1` `⌘2` `⌘3` | Switch between the map, ownership, and age |
+| `⌘F` | Filter files, so matches stay lit and everything else dims |
+| Click a folder's name | Open it, so its files get the whole canvas |
 | `⌘L` | Zoom on small files, on or off |
 | `Esc` | Clear the search, the author, the selection, then step back out |
 
 ## What it shows
 
-**The map** — every file that exists at the current moment, sized by length, coloured by
+**The map.** Every file that exists at the current moment, sized by length, coloured by
 hotspot score, grouped by top-level directory. Selecting a file outlines the files it
 usually changes with, so a hidden cluster becomes visible at a glance. Clicking a folder's
-name opens it, handing its contents the whole canvas; hovering a rectangle too small to
-carry a name magnifies the area around it — `⌘L`, or the toolbar button, turns that off.
+name opens it, handing its contents the whole canvas. Turn on the magnifier with `⌘L` or
+the toolbar button and hovering a rectangle too small to carry a name will enlarge the area
+around it.
 
-**The ownership map** — the same rectangles, coloured by whoever has the most commits to
+**The ownership map.** The same rectangles, coloured by whoever has the most commits to
 each file, and faded toward grey where no one person has a real claim on it. Blocks of one
 colour are the parts of the codebase a single person holds. The panel beside it counts how
 much of the code has only ever been touched by one person, and how few people it would take
@@ -90,7 +91,7 @@ to lose half of it.
 
 ![The ownership map, coloured by who owns each file](docs/ownership.png)
 
-**The age map** — the same rectangles again, coloured by how long it has been since anyone
+**The age map.** The same rectangles again, coloured by how long it has been since anyone
 touched each file. Bright is where the work is; dark is code nobody has had a reason to
 open, which is either the stable foundation or the part everyone is afraid of. Scrubbing
 makes the point better than a screenshot can: play the history and watch the codebase cool
@@ -98,15 +99,7 @@ behind the playhead as the work moves on.
 
 ![The age map, dark where the codebase has stopped moving](docs/age.png)
 
-**The coupling map** — every group of files that changes together, drawn as a constellation
-per group. The inspector answers this for one file, but only once you have guessed which
-file to click; this is the same fact without the guess. Not a treemap, deliberately: the
-other three views are about a property each file has, and this one is about a relation
-between files, which rectangles cannot draw.
-
-![The coupling map, one constellation per group of files that change together](docs/coupling.png)
-
-**The inspector** — for the selected file at the selected moment: its size, its churn, its
+**The inspector.** For the selected file at the selected moment: its size, its churn, its
 nesting depth, who has touched it, what it changes with, and how its churn was distributed
 over time.
 
@@ -134,34 +127,26 @@ reachable without walking trees.
 state at commit `i`; moving to `j` applies or unapplies only the commits in between, so
 cost scales with the size of the jump rather than the size of the repository. Every
 quantity it tracks is either additive or a count of applied events, which makes stepping
-backwards exactly as cheap and exactly as accurate as stepping forwards — there is no undo
-log. A property test asserts that scrubbing to a position from either direction produces
+backwards exactly as cheap and exactly as accurate as stepping forwards, with no undo log
+anywhere. A property test asserts that scrubbing to a position from either direction produces
 identical state.
 
-**Coupling needs no index — until you ask about all of it.** Finding what a file changes with looks like it needs a
+**Coupling needs no index.** Finding what a file changes with looks like it needs a
 precomputed table of every file pair, which is expensive to build and to keep correct
 while scrubbing. It does not: a file's own event list already names every commit that
 touched it, and each of those commits already names every other file it touched. Walking
 that costs a pass over one file's history, so coupling is answered on demand for whatever
-was just clicked. Asked about the whole snapshot there is no file to start from, so the
-coupling view does build the pair table — but only over the commits actually scrubbed
-through, and only over commits small enough to mean something, which caps what any one
-commit can contribute at a few hundred pairs however large the repository is. Commits
-touching more than 25 files are ignored throughout — a mass rename couples everything to
-everything and means nothing.
-
-Strength is measured against the rarer of the two files rather than the busier one. A file
-touched in nearly every commit would otherwise look coupled to the entire codebase, when
-what it is, is busy.
+was just clicked. Commits touching more than 25 files are ignored, because a mass rename
+couples everything to everything and means nothing.
 
 **Ownership is counted in commits, not surviving lines.** `git blame` answers "whose lines
 are these right now", which is the fragile version of the question: one reformat or one
 rename rewrites every line's author without moving any knowledge. Who keeps coming back to
 change a file is the durable signal, and it falls straight out of the history already
-parsed. Unlike coupling, it cannot be answered for one file on demand — the question is
-about the shape of the whole codebase — so it walks every live file's applied events, which
-is why the app runs it once the playhead settles and caches the answer per position rather
-than on every frame.
+parsed. Unlike coupling it cannot be answered for one file on demand, because the question
+is about the shape of the whole codebase, so it walks every live file's applied events.
+That is why the app runs it once the playhead settles and caches the answer per position
+rather than on every frame.
 
 **Complexity is measured lazily and cached by blob SHA.** Reading file contents is the only
 expensive operation, so it happens only for the top files by churn, only once the playhead
@@ -179,18 +164,17 @@ the second is git's own history, at 60,896 non-merge commits (82,154 including m
 | Load and index | 0.62s | 25s † |
 | Scrub step (cached) | 0.05ms | 0.17ms † |
 | Repository-wide ownership | 1ms | 16ms † |
-| Repository-wide file age | 1.0ms | — |
-| Coupling clusters, whole snapshot | 0.9ms | — |
+| Repository-wide file age | 1.0ms | not measured |
 | Treemap layout, 250 tiles | 0.37ms | 0.16ms † |
 | First complexity measurement | 0.15s | 0.83s † |
 | Repeat measurement (cached) | 0.21ms | 0.49ms † |
 | Memory, resident | 18 MB | 159 MB † |
 
 † Measured on an earlier build and not re-run since. Load got faster when the branch view
-was removed — that was a second `git log` pass — and the treemap gained a pass of its own,
-so the figures marked will have moved. They are left in because the shape of the answer is
-what the column is for, and the shape has not changed. The age view was added after that
-run and has only been measured on the smaller repository.
+was removed, since that view cost a second `git log` pass, and the treemap gained a pass of
+its own, so the figures marked will have moved. They are left in because the shape of the
+answer is what the column is for, and the shape has not changed. The age view was added
+after that run and has only been measured on the smaller repository.
 
 Everything that happens while the app is open stays far inside a frame at both sizes, and
 memory grows roughly with the number of file events rather than with the number of commits.
@@ -198,8 +182,8 @@ memory grows roughly with the number of file events rather than with the number 
 **Loading is the one thing that does not scale, and it is not Codewake's code.** Of the 25
 seconds, 23.5 are `git log --raw --numstat` producing 28 MB of output; parsing that costs
 0.21s and building the file timelines another 0.2s. Making a large repository open quickly
-would mean not reading its whole history up front — loading around the playhead, or caching
-a parsed history on disk — rather than optimising anything in the current path.
+would mean not reading its whole history up front, by loading around the playhead or
+caching a parsed history on disk, rather than optimising anything in the current path.
 
 Reproduce with `CODEWAKE_BENCH_REPO=~/some/repo swift test -c release --filter BenchmarkTests`.
 
@@ -209,11 +193,11 @@ Reproduce with `CODEWAKE_BENCH_REPO=~/some/repo swift test -c release --filter B
 swift test
 ```
 
-77 tests covering the log parser against real git output (renames, binary files,
+71 tests covering the log parser against real git output (renames, binary files,
 deletions, awkward commit subjects), the snapshot engine's forward/backward equivalence,
-coupling thresholds and cluster extraction, ownership and bus factor as the playhead
-moves, file age across scrubs and renames, complexity scoring, treemap geometry including that no file is ever
-too small to be drawn, and an end-to-end pass over a repository the test builds itself.
+coupling thresholds, ownership and bus factor as the playhead moves, file age across scrubs
+and renames, complexity scoring, treemap geometry including that no file is ever too small
+to be drawn, and an end-to-end pass over a repository the test builds itself.
 
 GitHub Actions runs the same tests on every push, then builds and signs `Codewake.app` and
 attaches it to any tagged release.
@@ -227,9 +211,9 @@ committing under two names counts as two people. There is no architecture or dep
 view.
 
 Opening a very large repository takes about half a minute, almost all of it spent waiting
-for `git log` — see Performance.
+for `git log`. See Performance.
 
-A hotspot is a question, not a verdict — it says where to look, not what is wrong.
+A hotspot is a question, not a verdict. It says where to look, not what is wrong.
 
 ## License
 
