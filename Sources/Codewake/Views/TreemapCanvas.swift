@@ -5,6 +5,7 @@
 //  Created by Luis Resendez on 05/03/2026.
 //
 
+import AppKit
 import CodewakeKit
 import SwiftUI
 
@@ -146,17 +147,31 @@ struct TreemapCanvas<Tooltip: View>: View {
         }
 
         if group.showsHeader {
-            // A header the pointer is over and that can be opened lights up, which is the
-            // only affordance saying the map goes deeper than what is on screen.
             let isOpenable = onOpen != nil && group.isOpenable
             let isHovered = isOpenable && group.id == hoveredHeader
+            // The chevron is always there on a directory that can be opened, not just under
+            // the pointer. Hover was the only thing saying the map goes deeper than what is
+            // on screen, which meant the feature was invisible to anyone who did not happen
+            // to rest the cursor on a heading.
             context.draw(
-                Text(group.id + (isHovered ? " ›" : ""))
+                Text(group.id)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(isHovered ? Palette.accent : Palette.secondaryText),
                 at: CGPoint(x: group.headerFrame.minX + 3, y: group.headerFrame.midY),
                 anchor: .leading
             )
+            if isOpenable {
+                let width = group.id.size(withAttributes: [
+                    .font: NSFont.systemFont(ofSize: 10, weight: .semibold)
+                ]).width
+                context.draw(
+                    Text("›")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(isHovered ? Palette.accent : Palette.faintText),
+                    at: CGPoint(x: group.headerFrame.minX + 8 + width, y: group.headerFrame.midY),
+                    anchor: .leading
+                )
+            }
         }
     }
 

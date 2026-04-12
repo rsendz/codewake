@@ -17,8 +17,8 @@ struct MainView: View {
             switch state.phase {
             case .welcome:
                 WelcomeView(recents: state.recentRepositories) { state.open($0) }
-            case .loading(let message):
-                loading(message)
+            case .loading(let progress):
+                loading(progress)
             case .failed(let message):
                 failure(message)
             case .ready:
@@ -35,13 +35,26 @@ struct MainView: View {
 
     // MARK: - States
 
-    private func loading(_ message: String) -> some View {
+    private func loading(_ progress: AppState.Phase.Progress) -> some View {
         VStack(spacing: 12) {
             ProgressView()
                 .controlSize(.small)
-            Text(message)
+            Text(progress.commits > 0
+                 ? "\(progress.message)  \(progress.commits.formatted()) commits"
+                 : progress.message)
                 .font(.system(size: 12))
                 .foregroundStyle(Palette.secondaryText)
+
+            // Worth saying out loud on a big repository, because the wait is long enough to
+            // look like a hang and the reason for it is not something the app can fix.
+            if progress.isSlow {
+                Text("A history this size takes a while to read. Almost all of that is `git log` itself producing the data; parsing it takes a fraction of a second.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.faintText)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 380)
+                    .padding(.top, 2)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

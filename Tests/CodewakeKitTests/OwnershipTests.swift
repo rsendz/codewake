@@ -266,6 +266,7 @@ private struct StubHistoryProvider: HistoryProvider {
     let commits: [Commit]
     var name: String { "stub" }
 
+    func commitCount() async throws -> Int { commits.count }
     func loadCommits() async throws -> [Commit] { commits }
     func loadBlobs(shas: [String]) async throws -> [String: String] { [:] }
 }
