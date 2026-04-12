@@ -63,9 +63,17 @@ public struct FileDetail: Sendable {
 }
 
 public enum LoadPhase: Sendable {
-    case readingHistory
-    case buildingTimelines
+    /// Counting comes first and is quick, so the wait that follows can be described rather
+    /// than merely spun at.
+    case counting
+    case readingHistory(commits: Int)
+    case buildingTimelines(commits: Int)
     case ready
+
+    /// Roughly how many commits it takes before the wait is worth apologising for. Reading
+    /// the log is linear in history size and is almost entirely git's own time, so this is
+    /// a threshold on the machine's patience rather than on anything Codewake controls.
+    public static let slowCommitCount = 20_000
 }
 
 public struct SnapshotStatistics: Sendable, Hashable {
@@ -105,10 +113,14 @@ public actor AnalysisEngine {
         filter: FileFilter = .default,
         progress: @Sendable (LoadPhase) -> Void = { _ in }
     ) async throws -> AnalysisEngine {
-        progress(.readingHistory)
+        progress(.counting)
+        // Failing to count is not a reason to refuse to load; it only costs the estimate.
+        let expected = (try? await provider.commitCount()) ?? 0
+
+        progress(.readingHistory(commits: expected))
         let commits = try await provider.loadCommits()
 
-        progress(.buildingTimelines)
+        progress(.buildingTimelines(commits: commits.count))
         let history = RepositoryHistory(name: provider.name, commits: commits, filter: filter)
 
         let summaries = commits.enumerated().map { index, commit -> CommitSummary in

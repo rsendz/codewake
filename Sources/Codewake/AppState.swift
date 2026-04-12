@@ -25,9 +25,19 @@ private let magnifierDefaultsKey = "magnifiesSmallTiles"
 final class AppState {
     enum Phase {
         case welcome
-        case loading(String)
+        case loading(Progress)
         case ready
         case failed(String)
+
+        /// What to say while a repository is being read. The commit count is carried along
+        /// so a large repository can be told it is a large repository, instead of leaving
+        /// the user to wonder whether the app has hung.
+        struct Progress {
+            var message: String
+            var commits: Int = 0
+
+            var isSlow: Bool { commits >= LoadPhase.slowCommitCount }
+        }
     }
 
     enum ViewMode: String, CaseIterable, Identifiable {
@@ -68,12 +78,13 @@ final class AppState {
     }
     /// When set, the ownership map dims everything this author does not own.
     var highlightedAuthor: String?
-    /// Directory the map is opened into, as path components; empty is the whole repository.
+    /// Where the map is opened to. At repository scale the smallest files are a few points
+    /// across: visible, but with no room for a name. Opening a directory hands its files the
+    /// whole canvas, which is the level at which they can be read and worked with.
     ///
-    /// At repository scale the smallest files are a few points across — visible, but with no
-    /// room for a name. Opening a directory hands its files the whole canvas, which is the
-    /// level at which they can be read and worked with.
-    private(set) var mapRoot: [String] = []
+    /// The rules about which moves are legal live in `MapLocation`, in the kit, where they
+    /// can be tested without a window.
+    private(set) var location = MapLocation()
     var searchText: String = ""
     /// Whether hovering a rectangle too small to carry a name magnifies the area around it.
     ///
@@ -119,7 +130,7 @@ final class AppState {
     func open(_ url: URL) {
         loadTask?.cancel()
         stopPlayback()
-        phase = .loading("Reading history…")
+        phase = .loading(Phase.Progress(message: "Opening…"))
 
         loadTask = Task {
             do {
@@ -136,7 +147,7 @@ final class AppState {
                 self.repositoryURL = url
                 self.commitIndex = engine.summary.commitCount - 1
                 self.selection = nil
-                self.mapRoot = []
+                self.location = MapLocation()
                 self.searchText = ""
                 self.detail = nil
                 self.ownership = nil
@@ -183,7 +194,7 @@ final class AppState {
         hotspots = []
         statistics = nil
         selection = nil
-        mapRoot = []
+        location = MapLocation()
         detail = nil
         ownership = nil
         ages = nil
@@ -194,9 +205,14 @@ final class AppState {
 
     private func report(_ loadPhase: LoadPhase) {
         switch loadPhase {
-        case .readingHistory: phase = .loading("Reading history…")
-        case .buildingTimelines: phase = .loading("Building timelines…")
-        case .ready: break
+        case .counting:
+            phase = .loading(Phase.Progress(message: "Counting commits…"))
+        case .readingHistory(let commits):
+            phase = .loading(Phase.Progress(message: "Reading history…", commits: commits))
+        case .buildingTimelines(let commits):
+            phase = .loading(Phase.Progress(message: "Building timelines…", commits: commits))
+        case .ready:
+            break
         }
     }
 
@@ -291,100 +307,48 @@ final class AppState {
 
     // MARK: - Opening a directory
 
-    /// Opens a subdirectory of wherever the map currently is.
-    ///
-    /// The name has to be one that exists at this level. Callers that hold a list of
-    /// top-level directories rather than of the current level's must use
-    /// `open(topLevelDirectory:)`, and this guard is what stops the difference from
-    /// producing a path that was never in the repository.
     func open(directory name: String) {
-        guard subdirectories().contains(name) else { return }
-        descend(into: name)
+        location.open(name, among: visiblePaths)
     }
 
-    /// Jumps to a top-level directory from wherever the map is, rather than looking for one
-    /// inside the current one. The inspector's lists are of the whole repository, so this is
-    /// what their rows mean.
+    /// The inspector's lists are of the whole repository, so a row in one means a top-level
+    /// directory rather than one inside wherever the map happens to be.
     func open(topLevelDirectory name: String) {
-        mapRoot = []
-        guard subdirectories().contains(name) else { return }
-        descend(into: name)
+        location.openFromRoot(name, among: allPaths)
     }
 
-    private func descend(into name: String) {
-        mapRoot.append(name)
-        // A directory with exactly one subdirectory in it and nothing else is not a level
-        // worth stopping at. Opening `web` to find only `src` wastes the click and the
-        // canvas, so keep going until there is actually a choice to make.
-        while let only = onlySubdirectory() {
-            mapRoot.append(only)
-        }
-    }
-
-    /// Directory names one level below wherever the map currently is.
-    private func subdirectories() -> Set<String> {
-        let depth = mapRoot.count
-        var names: Set<String> = []
-        for path in visiblePaths {
-            let components = path.split(separator: "/")
-            guard components.count > depth + 1 else { continue }
-            names.insert(String(components[depth]))
-        }
-        return names
-    }
-
-    /// Paths of the files the view on screen is currently drawing.
-    ///
-    /// Each map draws a different set: the hotspot map takes the busiest files, ownership
-    /// and age take the largest. Navigation has to be answered against whichever one is in
-    /// front of the user, or a directory that is plainly on screen refuses to open because
-    /// it happens not to be in another view's selection.
-    private var visiblePaths: [String] {
-        let all: [String] = switch viewMode {
-        case .map: hotspots.map(\.path)
-        case .ownership: (ownership?.files ?? []).map(\.path)
-        case .age: (ages?.files ?? []).map(\.path)
-        }
-        guard !mapRoot.isEmpty else { return all }
-        let prefix = rootPrefix
-        return all.filter { $0.hasPrefix(prefix) }
-    }
-
-    /// The single subdirectory of the current root, when it is the only thing there.
-    private func onlySubdirectory() -> String? {
-        let depth = mapRoot.count
-        var names: Set<String> = []
-        for path in visiblePaths {
-            let components = path.split(separator: "/")
-            // A file sitting loose at this level means the level has content of its own.
-            guard components.count > depth + 1 else { return nil }
-            names.insert(String(components[depth]))
-            if names.count > 1 { return nil }
-        }
-        return names.count == 1 ? names.first : nil
-    }
-
-    /// Back to `depth` components deep; 0 is the whole repository.
     func closeDirectory(to depth: Int) {
-        mapRoot = Array(mapRoot.prefix(depth))
+        location.close(to: depth)
     }
+
+    var mapRoot: [String] { location.components }
 
     /// Path prefix every visible file shares, with its trailing slash.
-    var rootPrefix: String {
-        mapRoot.isEmpty ? "" : mapRoot.joined(separator: "/") + "/"
-    }
+    var rootPrefix: String { location.prefix }
 
     /// The files the map is currently showing. Colour, ranking and the treemap's own scale
     /// all work from this rather than from the whole repository, so opening a directory
     /// re-reads its contents against each other instead of against the codebase.
     var visibleHotspots: [Hotspot] {
-        guard !mapRoot.isEmpty else { return hotspots }
-        let prefix = rootPrefix
-        return hotspots.filter { $0.path.hasPrefix(prefix) }
+        location.isRoot ? hotspots : hotspots.filter { location.contains($0.path) }
     }
 
-    func isVisible(_ path: String) -> Bool {
-        mapRoot.isEmpty || path.hasPrefix(rootPrefix)
+    /// Paths of the files the view on screen draws, before the location narrows them.
+    ///
+    /// Each map draws a different set: the hotspot map takes the busiest files, ownership
+    /// and age take the largest. Navigation has to be answered against whichever one is in
+    /// front of the user, or a directory that is plainly on screen refuses to open because
+    /// it happens not to be in another view's selection.
+    private var allPaths: [String] {
+        switch viewMode {
+        case .map: hotspots.map(\.path)
+        case .ownership: (ownership?.files ?? []).map(\.path)
+        case .age: (ages?.files ?? []).map(\.path)
+        }
+    }
+
+    private var visiblePaths: [String] {
+        allPaths.filter { location.contains($0) }
     }
 
     func step(by delta: Int) {
@@ -497,8 +461,8 @@ final class AppState {
             highlightedAuthor = nil
         } else if selection != nil {
             select(nil)
-        } else if !mapRoot.isEmpty {
-            mapRoot.removeLast()
+        } else {
+            location.closeOne()
         }
     }
 
