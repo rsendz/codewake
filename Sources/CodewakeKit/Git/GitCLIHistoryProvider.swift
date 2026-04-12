@@ -45,8 +45,22 @@ public struct GitCLIHistoryProvider: HistoryProvider {
         // the author date would let the displayed timeline run backwards on a repository
         // that rebases or cherry-picks. It is also the more meaningful of the two here:
         // this app shows when work landed in the branch, not when it was first written.
-        "--format=%x1e%H%x1f%an%x1f%ae%x1f%ct%x1f%s",
+        //
+        // %aN and %aE rather than %an and %ae: the capitalised forms apply the repository's
+        // .mailmap. One person committing as "Ada" and "ada@work" and "A. Lovelace" counts
+        // as three people otherwise, which quietly wrecks both the ownership map and the
+        // bus factor. Repositories that care about this already keep a .mailmap, and git
+        // already knows how to read it, so the fix is to stop ignoring it.
+        "--format=%x1e%H%x1f%aN%x1f%aE%x1f%ct%x1f%s",
     ]
+
+    public func commitCount() async throws -> Int {
+        try await validateRepository()
+        // `rev-list --count` walks the graph without formatting or diffing anything, so it
+        // returns in well under a second even where the full log takes half a minute.
+        let output = try await runner.runText(["rev-list", "--count", "--no-merges", "HEAD"])
+        return Int(output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    }
 
     public func loadCommits() async throws -> [Commit] {
         try await validateRepository()
