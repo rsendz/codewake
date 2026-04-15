@@ -79,7 +79,8 @@ term the interface uses.
 **The map.** Every file that exists at the current moment, sized by length, coloured by
 hotspot score, grouped by top-level directory. Selecting a file outlines the files it
 usually changes with, so a hidden cluster becomes visible at a glance. Clicking a folder's
-name opens it, handing its contents the whole canvas. Turn on the magnifier with `⌘L` or
+name opens it, handing its contents the whole canvas; directories that can be opened carry
+a chevron. Turn on the magnifier with `⌘L` or
 the toolbar button and hovering a rectangle too small to carry a name will enlarge the area
 around it.
 
@@ -157,33 +158,34 @@ using size as a stand-in and refines once you let go.
 
 Two repositories, four orders of magnitude apart. The first is a 1,836-commit application;
 the second is git's own history, at 60,896 non-merge commits (82,154 including merges),
-5,004 files and 1.6M lines.
+5,004 files and 1,631,907 lines at HEAD.
 
 | Operation | 1,836 commits | 60,896 commits |
 | --- | --- | --- |
-| Load and index | 0.62s | 25s † |
-| Scrub step (cached) | 0.05ms | 0.17ms † |
-| Repository-wide ownership | 1ms | 16ms † |
-| Repository-wide file age | 1.0ms | not measured |
-| Treemap layout, 250 tiles | 0.37ms | 0.16ms † |
-| First complexity measurement | 0.15s | 0.83s † |
-| Repeat measurement (cached) | 0.21ms | 0.49ms † |
-| Memory, resident | 18 MB | 159 MB † |
-
-† Measured on an earlier build and not re-run since. Load got faster when the branch view
-was removed, since that view cost a second `git log` pass, and the treemap gained a pass of
-its own, so the figures marked will have moved. They are left in because the shape of the
-answer is what the column is for, and the shape has not changed. The age view was added
-after that run and has only been measured on the smaller repository.
+| Load and index | 0.75s | 28s |
+| Scrub step (cached) | 0.05ms | 0.18ms |
+| Repository-wide ownership | 1ms | 18ms |
+| Repository-wide file age | 1.0ms | 5.5ms |
+| Treemap layout, 250 tiles | 0.37ms | 0.18ms |
+| First complexity measurement | 0.17s | 0.95s |
+| Repeat measurement (cached) | 0.22ms | 0.58ms |
+| Memory, resident | 16 MB | 156 MB |
 
 Everything that happens while the app is open stays far inside a frame at both sizes, and
 memory grows roughly with the number of file events rather than with the number of commits.
 
-**Loading is the one thing that does not scale, and it is not Codewake's code.** Of the 25
-seconds, 23.5 are `git log --raw --numstat` producing 28 MB of output; parsing that costs
-0.21s and building the file timelines another 0.2s. Making a large repository open quickly
-would mean not reading its whole history up front, by loading around the playhead or
-caching a parsed history on disk, rather than optimising anything in the current path.
+**Loading is the one thing that does not scale, and it is not Codewake's code.** Of the 28
+seconds on git's history, 27.1 goes on reading the log, and only 0.21s of that is parsing:
+the rest is `git log --raw --numstat` producing 27 MB of output. Building the file timelines
+costs another 0.36s, and counting the commits up front, so the wait can be described rather
+than merely spun at, costs 0.7s. Run on its own with the same arguments, `git log` takes 21
+seconds. Making a large repository open quickly would mean not reading its whole history up
+front, by loading around the playhead or caching a parsed history on disk, rather than
+optimising anything in the current path.
+
+Since none of that is fixable from here, the app says so rather than hiding it: a repository
+over twenty thousand commits gets its commit count and an explanation of where the wait is
+going, instead of an unqualified spinner.
 
 Reproduce with `CODEWAKE_BENCH_REPO=~/some/repo swift test -c release --filter BenchmarkTests`.
 
@@ -193,11 +195,12 @@ Reproduce with `CODEWAKE_BENCH_REPO=~/some/repo swift test -c release --filter B
 swift test
 ```
 
-71 tests covering the log parser against real git output (renames, binary files,
+80 tests covering the log parser against real git output (renames, binary files,
 deletions, awkward commit subjects), the snapshot engine's forward/backward equivalence,
 coupling thresholds, ownership and bus factor as the playhead moves, file age across scrubs
 and renames, complexity scoring, treemap geometry including that no file is ever too small
-to be drawn, and an end-to-end pass over a repository the test builds itself.
+to be drawn, the rules about which directory a click may open, and an end-to-end pass over
+a repository the test builds itself.
 
 GitHub Actions runs the same tests on every push, then builds and signs `Codewake.app` and
 attaches it to any tagged release.
@@ -207,11 +210,11 @@ attaches it to any tagged release.
 Complexity is a proxy, not a parse. Only the current branch's history is read, so work
 that never landed on it does not appear. Merge commits are skipped when counting churn, so
 work is not counted twice. Authors are identified by the name on the commit, so one person
-committing under two names counts as two people. There is no architecture or dependency
-view.
+committing under two names counts as two people unless the repository has a `.mailmap`,
+which is read if present. There is no architecture or dependency view.
 
 Opening a very large repository takes about half a minute, almost all of it spent waiting
-for `git log`. See Performance.
+for `git log`, which the app says while you wait. See Performance.
 
 A hotspot is a question, not a verdict. It says where to look, not what is wrong.
 
