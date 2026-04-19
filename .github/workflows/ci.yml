@@ -14,12 +14,25 @@ concurrency:
 jobs:
   test:
     name: Build and test
-    runs-on: macos-latest
+    # Pinned rather than macos-latest: Package.swift deploys to macOS 15 and the app uses
+    # macOS 15 SwiftUI, so building needs the macOS 15 SDK. `macos-latest` moves between
+    # images without warning, and when it moves the failure is a compile error deep in a
+    # build log rather than anything that names the real cause.
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
       - name: Toolchain
-        run: swift --version
+        run: |
+          swift --version
+          xcodebuild -version
+          git --version
+          # Fail here, with a sentence, rather than a hundred lines further down. The
+          # package needs Swift 6 for Synchronization and for strict concurrency.
+          if ! swift --version 2>&1 | grep -qE 'Swift version 6\.'; then
+            echo "::error::Codewake needs a Swift 6 toolchain (Xcode 16 or later)."
+            exit 1
+          fi
 
       - name: Test
         run: swift test
@@ -30,7 +43,7 @@ jobs:
 
   app:
     name: Package the app
-    runs-on: macos-latest
+    runs-on: macos-15
     needs: test
     permissions:
       contents: write
