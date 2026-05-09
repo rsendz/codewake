@@ -7,7 +7,9 @@ Drag the playhead and watch the codebase change: files appear, directories grow,
 heat up, the files that secretly change together light up, and the parts of the codebase
 only one person has ever touched show themselves.
 
-![Codewake showing a repository's hotspot map](docs/screenshot.png)
+![Playing a repository's history: files appear, directories grow, hotspots heat up](docs/scrub.gif)
+
+*Nine years of [swift-nio](https://github.com/apple/swift-nio), 3,068 commits, played in nine seconds.*
 
 ## Why
 
@@ -80,9 +82,15 @@ term the interface uses.
 hotspot score, grouped by top-level directory. Selecting a file outlines the files it
 usually changes with, so a hidden cluster becomes visible at a glance. Clicking a folder's
 name opens it, handing its contents the whole canvas; directories that can be opened carry
-a chevron. Turn on the magnifier with `⌘L` or
-the toolbar button and hovering a rectangle too small to carry a name will enlarge the area
-around it.
+a chevron. Turn on the magnifier with `⌘L` or the toolbar button and hovering a rectangle
+too small to carry a name will enlarge the area around it.
+
+![The hotspot map with a file selected](docs/screenshot.png)
+
+Opening a directory re-reads its contents against each other rather than against the whole
+codebase, which is how a module's own shape becomes visible:
+
+![Opening a directory, and stepping back out with Esc](docs/open-directory.gif)
 
 **The ownership map.** The same rectangles, coloured by whoever has the most commits to
 each file, and faded toward grey where no one person has a real claim on it. Blocks of one
@@ -98,7 +106,7 @@ open, which is either the stable foundation or the part everyone is afraid of. S
 makes the point better than a screenshot can: play the history and watch the codebase cool
 behind the playhead as the work moves on.
 
-![The age map, dark where the codebase has stopped moving](docs/age.png)
+![The age map: the codebase cools behind the playhead as work moves elsewhere](docs/age.gif)
 
 **The inspector.** For the selected file at the selected moment: its size, its churn, its
 nesting depth, who has touched it, what it changes with, and how its churn was distributed
@@ -156,20 +164,22 @@ using size as a stand-in and refines once you let go.
 
 ## Performance
 
-Two repositories, four orders of magnitude apart. The first is a 1,836-commit application;
-the second is git's own history, at 60,896 non-merge commits (82,154 including merges),
-5,004 files and 1,631,907 lines at HEAD.
+Two public repositories, twenty times apart in size. The first is
+[swift-nio](https://github.com/apple/swift-nio) at 3,068 commits, 766 files and 237,442
+lines; the second is git's own history, at 60,896 non-merge commits (82,154 including
+merges), 5,004 files and 1,631,907 lines at HEAD. Both are the repositories in the
+screenshots above, so every number here can be reproduced.
 
-| Operation | 1,836 commits | 60,896 commits |
+| Operation | swift-nio | git |
 | --- | --- | --- |
-| Load and index | 0.75s | 28s |
-| Scrub step (cached) | 0.05ms | 0.18ms |
+| Load and index | 1.5s | 28s |
+| Scrub step (cached) | 0.06ms | 0.18ms |
 | Repository-wide ownership | 1ms | 18ms |
-| Repository-wide file age | 1.0ms | 5.5ms |
-| Treemap layout, 250 tiles | 0.37ms | 0.18ms |
-| First complexity measurement | 0.17s | 0.95s |
-| Repeat measurement (cached) | 0.22ms | 0.58ms |
-| Memory, resident | 16 MB | 156 MB |
+| Repository-wide file age | 1.1ms | 5.5ms |
+| Treemap layout, 250 tiles | 0.29ms | 0.18ms |
+| First complexity measurement | 0.26s | 0.95s |
+| Repeat measurement (cached) | 0.23ms | 0.58ms |
+| Memory, resident | 31 MB | 156 MB |
 
 Everything that happens while the app is open stays far inside a frame at both sizes, and
 memory grows roughly with the number of file events rather than with the number of commits.
