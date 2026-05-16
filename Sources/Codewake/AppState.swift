@@ -106,13 +106,23 @@ final class AppState {
     private var engine: AnalysisEngine?
     private var refineTask: Task<Void, Never>?
     private var detailTask: Task<Void, Never>?
-    private var derivedTask: Task<Void, Never>?
-    /// Only the newest derived-view task may clear `isComputingDerived`. Cancelling a
-    /// task does not run its `defer` synchronously — it fires whenever that task next gets
-    /// scheduled, which is after the replacement has already set the flag.
-    private var derivedGeneration = 0
+    /// Which position and view the derived maps should be showing. A single slot, always
+    /// holding the newest request: the worker takes whatever is in it whenever it comes
+    /// free, so intermediate positions are dropped rather than queued.
+    private var derivedRequest: DerivedRequest?
+    private var derivedWorker: Task<Void, Never>?
+    /// Identifies the current worker, so a cancelled one tidying up on its way out cannot
+    /// clear the state belonging to its replacement. Cancelling a task does not run its
+    /// `defer` there and then — that happens whenever the task is next scheduled, which can
+    /// be after a new worker has already taken over.
+    private var derivedWorkerToken = 0
     private var playbackTask: Task<Void, Never>?
     private var loadTask: Task<Void, Never>?
+
+    private struct DerivedRequest {
+        let index: Int
+        let mode: ViewMode
+    }
 
     /// How long the playhead must sit still before spending git reads on exact complexity.
     private let refineDelay = Duration.milliseconds(180)
@@ -129,6 +139,7 @@ final class AppState {
 
     func open(_ url: URL) {
         loadTask?.cancel()
+        cancelDerivedWork()
         stopPlayback()
         phase = .loading(Phase.Progress(message: "Opening…"))
 
@@ -186,7 +197,7 @@ final class AppState {
         loadTask?.cancel()
         stopPlayback()
         refineTask?.cancel()
-        derivedTask?.cancel()
+        cancelDerivedWork()
         engine = nil
         summary = nil
         authorColors = AuthorColors(ranking: [])
@@ -264,45 +275,73 @@ final class AppState {
     ///
     /// These walk every live file, so they are not free the way the hotspot map is — but
     /// they are cheap enough to keep up: ownership costs 1ms on a small repository and 16ms
-    /// on git's own history. They were previously debounced by the same 180ms the
-    /// complexity path uses, which is there to avoid *git reads*; nothing here touches git.
-    /// Playback steps every 50ms, so that debounce meant the pending recompute was always
-    /// cancelled before it fired and these views simply froze while the timeline played.
+    /// on git's own history. Nothing here touches git, so the only reason to wait at all is
+    /// to coalesce a fast drag.
+    ///
+    /// Requests are coalesced rather than cancelled and replaced, and a finished report is
+    /// kept whether or not the playhead has moved on since it was asked for. Both matter for
+    /// the same reason: a recompute has to make a round trip out to the engine's actor and
+    /// back to the main actor, while playback moves the playhead every 50ms. Discarding a
+    /// report that no longer describes `commitIndex` makes every update a race against the
+    /// next step — and one lost on a repository large enough is lost every time after, so
+    /// the map froze for the rest of playback while the counters above it kept moving. One
+    /// worker draining a single-slot mailbox instead means a late answer is still the newest
+    /// answer, and the map lands a step behind rather than not at all.
     private func refreshDerivedView() {
-        derivedTask?.cancel()
-        derivedGeneration += 1
-        let generation = derivedGeneration
-
         guard let engine, viewMode != .map else {
+            derivedRequest = nil
             isComputingDerived = false
             return
         }
-        let index = commitIndex
-        let mode = viewMode
+        derivedRequest = DerivedRequest(index: commitIndex, mode: viewMode)
+        guard derivedWorker == nil else { return }
         isComputingDerived = true
+        derivedWorkerToken += 1
+        let token = derivedWorkerToken
 
-        derivedTask = Task {
-            defer { if generation == self.derivedGeneration { isComputingDerived = false } }
-            // Playback is already rate-limited to 20 steps a second, so waiting again just
-            // means never arriving.
+        derivedWorker = Task {
+            defer {
+                if token == derivedWorkerToken {
+                    derivedWorker = nil
+                    isComputingDerived = false
+                }
+            }
+            // Coalesce a fast drag before the first pass. Playback is already rate-limited
+            // to 20 steps a second, so waiting there just means never arriving.
             if !isPlaying {
                 try? await Task.sleep(for: derivedDelay)
                 guard !Task.isCancelled else { return }
             }
 
-            switch mode {
-            case .ownership:
-                let report = await engine.ownership(at: index)
-                guard !Task.isCancelled, index == self.commitIndex else { return }
-                self.ownership = report
-            case .age:
-                let report = await engine.ages(at: index)
-                guard !Task.isCancelled, index == self.commitIndex else { return }
-                self.ages = report
-            case .map:
-                break
+            // Draining rather than looping once: a position that arrives while this is
+            // computing replaces the slot, and is picked up on the way round.
+            while let request = derivedRequest {
+                derivedRequest = nil
+                switch request.mode {
+                case .ownership:
+                    let report = await engine.ownership(at: request.index)
+                    guard !Task.isCancelled else { return }
+                    // The view can have been switched away from while this was in flight.
+                    // Drop the answer, but stay in the loop for whatever asked for the switch.
+                    if viewMode == .ownership { ownership = report }
+                case .age:
+                    let report = await engine.ages(at: request.index)
+                    guard !Task.isCancelled else { return }
+                    if viewMode == .age { ages = report }
+                case .map:
+                    break
+                }
             }
         }
+    }
+
+    /// Drops any derived work in flight, for when the repository under it is going away.
+    private func cancelDerivedWork() {
+        derivedWorker?.cancel()
+        derivedWorker = nil
+        derivedWorkerToken += 1
+        derivedRequest = nil
+        isComputingDerived = false
     }
 
     // MARK: - Opening a directory
