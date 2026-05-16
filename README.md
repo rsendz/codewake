@@ -145,17 +145,13 @@ precomputed table of every file pair, which is expensive to build and to keep co
 while scrubbing. It does not: a file's own event list already names every commit that
 touched it, and each of those commits already names every other file it touched. Walking
 that costs a pass over one file's history, so coupling is answered on demand for whatever
-was just clicked. Commits touching more than 25 files are ignored, because a mass rename
-couples everything to everything and means nothing.
+was just clicked.
 
 **Ownership is counted in commits, not surviving lines.** `git blame` answers "whose lines
 are these right now", which is the fragile version of the question: one reformat or one
 rename rewrites every line's author without moving any knowledge. Who keeps coming back to
 change a file is the durable signal, and it falls straight out of the history already
-parsed. Unlike coupling it cannot be answered for one file on demand, because the question
-is about the shape of the whole codebase, so it walks every live file's applied events.
-That is why the app runs it once the playhead settles and caches the answer per position
-rather than on every frame.
+parsed.
 
 **Complexity is measured lazily and cached by blob SHA.** Reading file contents is the only
 expensive operation, so it happens only for the top files by churn, only once the playhead
@@ -217,11 +213,15 @@ attaches it to any tagged release.
 
 ## Limitations
 
-Complexity is a proxy, not a parse. Only the current branch's history is read, so work
-that never landed on it does not appear. Merge commits are skipped when counting churn, so
-work is not counted twice. Authors are identified by the name on the commit, so one person
-committing under two names counts as two people unless the repository has a `.mailmap`,
-which is read if present. There is no architecture or dependency view.
+Complexity is a proxy, not a parse: it scores indentation, which every language in a mixed
+repository already agrees on, and which buys a usable signal without a parser per language.
+Generated and vendored files are dropped before analysis, because a lock file churns more
+than any real source file and would win the hotspot ranking outright. Only the current
+branch's history is read, so work that never landed on it does not appear. Merge commits
+are skipped when counting churn, so work is not counted twice. Authors are identified by
+the name on the commit, so one person committing under two names counts as two people
+unless the repository has a `.mailmap`, which is read if present. There is no architecture
+or dependency view.
 
 Opening a very large repository takes about half a minute, almost all of it spent waiting
 for `git log`, which the app says while you wait. See Performance.
