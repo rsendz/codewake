@@ -76,10 +76,20 @@ echo "==> Signing ad-hoc"
 codesign --force --sign - --timestamp=none "$APP"
 codesign --verify --strict "$APP"
 
-echo "==> Zipping"
-ditto -c -k --sequesterRsrc --keepParent "$APP" "$DIST/$APP_NAME.zip"
+# A disk image rather than a zip, because it carries the install gesture with it: the
+# window holds the app beside an alias to /Applications, so the whole instruction is
+# "drag left onto right". A zip leaves a folder in Downloads and the moving to whoever
+# downloaded it. `ditto` does the copy so the signature survives into the image.
+echo "==> Building the disk image"
+STAGE="$(mktemp -d)"
+ditto "$APP" "$STAGE/$APP_NAME.app"
+ln -s /Applications "$STAGE/Applications"
+rm -f "$DIST/$APP_NAME.dmg"
+hdiutil create -volname "$APP_NAME" -srcfolder "$STAGE" -ov -format UDZO -quiet \
+    "$DIST/$APP_NAME.dmg"
+rm -rf "$STAGE"
 
 echo
 echo "$APP"
-echo "$DIST/$APP_NAME.zip  ($(du -h "$DIST/$APP_NAME.zip" | cut -f1))"
+echo "$DIST/$APP_NAME.dmg  ($(du -h "$DIST/$APP_NAME.dmg" | cut -f1))"
 echo "Architectures: $(lipo -archs "$CONTENTS/MacOS/$APP_NAME")"

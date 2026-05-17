@@ -22,9 +22,9 @@ point in a repository's history, and draws them as a map you can scrub through t
 
 ## Installing
 
-Download `Codewake.zip` from the [latest release](../../releases/latest), unzip it, and drag
-`Codewake.app` to your Applications folder. It is a universal binary and needs macOS 15 or
-later.
+Download `Codewake.dmg` from the [latest release](../../releases/latest), open it, and drag
+`Codewake.app` onto the Applications folder beside it. It is a universal binary and needs
+macOS 15 or later.
 
 The app is signed **ad-hoc**, not with a paid Apple Developer ID, so macOS quarantines it on
 first launch and refuses to open it. Either:
