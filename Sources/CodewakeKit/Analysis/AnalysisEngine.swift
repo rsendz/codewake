@@ -55,7 +55,8 @@ public struct FileDetail: Sendable {
     public let complexity: ComplexityScore?
     public let churnHistory: [ChurnPoint]
     public let recentCommits: [CommitSummary]
-    /// Commit counts by author, busiest first — the seed of a future ownership view.
+    /// Commit counts by author, busiest first — the question the ownership map asks of the
+    /// whole codebase, asked of one file.
     public let authors: [AuthorShare]
     /// Files that tend to change in the same commits as this one.
     public let coupling: [CouplingLink]
@@ -84,9 +85,11 @@ public struct SnapshotStatistics: Sendable, Hashable {
 
 /// Owns the loaded repository and answers questions about it at any point in history.
 ///
-/// The UI drives this with two kinds of call: `hotspots(at:)` during a drag, which only
-/// reads complexity that is already cached so it can keep up with the playhead, and
-/// `refinedHotspots(at:)` once the playhead settles, which is allowed to read blobs.
+/// The UI drives this with two kinds of call: `scrub(to:)` during a drag, which only reads
+/// complexity that is already cached so it can keep up with the playhead, and `refine(at:)`
+/// once the playhead settles, which is allowed to read blobs. `hotspots(at:)` and
+/// `refinedHotspots(at:)` are that same split without the surrounding statistics, and are
+/// now reached only from the tests.
 public actor AnalysisEngine {
     /// How many files the hotspot view considers. Past this, rectangles are too small to
     /// read and the extra analysis buys nothing.

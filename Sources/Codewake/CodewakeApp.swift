@@ -8,10 +8,16 @@
 import AppKit
 import SwiftUI
 
-/// A SwiftPM executable has no app bundle, so it would otherwise launch as a background
-/// process with no Dock icon and no way to come to the front.
+/// Makes the unbundled build behave like an app.
 ///
-/// This has to happen from the delegate rather than `App.init`: reaching for
+/// Codewake ships as `Codewake.app`: `Scripts/bundle.sh` writes the Info.plist that already
+/// tells macOS this is a normal foreground application, so none of this is needed there.
+/// Development runs it straight off `swift run` or Xcode's Run button, and an executable
+/// with no bundle around it launches as a background process — no Dock icon, no way to come
+/// to the front. Setting the activation policy by hand covers that case and is inert in the
+/// shipped app.
+///
+/// It has to happen from the delegate rather than `App.init`: reaching for
 /// `NSApplication.shared` before SwiftUI has finished installing its own application
 /// object preempts that setup, and the scene's window is then never created at all.
 final class AppDelegate: NSObject, NSApplicationDelegate {

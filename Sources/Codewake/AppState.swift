@@ -10,16 +10,19 @@ import CodewakeKit
 import Foundation
 import SwiftUI
 
+/// Not a static on `AppState`: a stored property's initializer cannot refer to `Self`.
+private let magnifierDefaultsKey = "magnifiesSmallTiles"
+
 /// Drives the whole app: owns the engine, the scrub position, and what the views show.
 ///
 /// Scrubbing runs on two tracks. Every position change immediately asks the engine for a
 /// result built from cached complexity, which never suspends on git and so keeps up with
 /// the drag. Once the playhead has been still for a moment, a second pass reads whatever
-/// blobs are missing and replaces the estimate. Both paths tag results with the position
+/// blobs are missing and replaces the estimate. Both tag their results with the position
 /// they describe, so a slow refine landing late is discarded rather than shown.
-/// Not a static on `AppState`: a stored property's initializer cannot refer to `Self`.
-private let magnifierDefaultsKey = "magnifiesSmallTiles"
-
+///
+/// The ownership and age maps run on a third track under the opposite rule: a late answer
+/// is kept rather than discarded. `refreshDerivedView()` says why.
 @MainActor
 @Observable
 final class AppState {

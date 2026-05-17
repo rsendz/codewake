@@ -27,10 +27,10 @@ struct TileAppearance {
 /// The treemap itself: squarified rectangles grouped by top-level directory, with hover,
 /// selection and a tooltip.
 ///
-/// Two maps are drawn this way — hotspots and ownership. They choose their own files and
-/// their own colours, but everything about how a rectangle is placed, grouped, labelled and
-/// hit-tested lives here once, so the two read as the same kind of picture rather than as
-/// two views that happen to both use squares.
+/// Three maps are drawn this way — hotspots, ownership and age. They choose their own files
+/// and their own colours, but everything about how a rectangle is placed, grouped, labelled
+/// and hit-tested lives here once, so the three read as the same kind of picture rather than
+/// as views that happen to all use squares.
 struct TreemapCanvas<Tooltip: View>: View {
     let entries: [TreemapEntry]
     /// How deep into the directory tree the view is currently opened. Groups are named by
