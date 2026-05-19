@@ -28,7 +28,10 @@ struct MainView: View {
         .frame(minWidth: 960, minHeight: 640)
         .background(Palette.canvas)
         .preferredColorScheme(.dark)
-        .navigationTitle(state.summary?.name ?? "Codewake")
+        // The window is the app, not the repository: the repository's name is already in
+        // the status bar, and a window called "swift-nio" is unidentifiable in Mission
+        // Control or the Window menu.
+        .navigationTitle("Codewake")
         .task { state.openLaunchRepository() }
         .sheet(isPresented: $state.isShowingHelp) { HelpView() }
     }
